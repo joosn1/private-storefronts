@@ -38,6 +38,7 @@ export const loader = async ({ request }) => {
     totalCustomers,
     activeCount,
     appUrl,
+    shop,
   };
 };
 
@@ -74,7 +75,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { storefronts, totalProducts, totalCustomers, activeCount, appUrl } =
+  const { storefronts, totalProducts, totalCustomers, activeCount, appUrl, shop } =
     useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
@@ -109,12 +110,16 @@ export default function Index() {
     fetcher.submit({ intent: "toggle", id: storefront.id }, { method: "post" });
   }
 
-  function getStorefrontUrl(slug) {
+  function getDirectUrl(slug) {
     return `${appUrl.replace(/\/$/, "")}/s/${slug}`;
   }
 
+  function getProxyUrl(slug) {
+    return `https://${shop}/apps/storefronts/${slug}`;
+  }
+
   function copyUrl(slug) {
-    navigator.clipboard.writeText(getStorefrontUrl(slug)).then(() => {
+    navigator.clipboard.writeText(getProxyUrl(slug)).then(() => {
       shopify.toast.show("Storefront URL copied to clipboard");
     });
   }
@@ -194,8 +199,11 @@ export default function Index() {
                     <s-table-cell>
                       <s-stack direction="block" gap="small-400">
                         <s-text>{sf.slug}</s-text>
+                        <s-text style={{ fontSize: "12px", color: "#666" }}>
+                          {getProxyUrl(sf.slug)}
+                        </s-text>
                         <s-button onClick={() => copyUrl(sf.slug)}>
-                          Copy URL
+                          Copy Proxy URL
                         </s-button>
                       </s-stack>
                     </s-table-cell>

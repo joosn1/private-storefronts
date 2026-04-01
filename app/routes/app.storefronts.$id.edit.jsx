@@ -130,16 +130,63 @@ export const action = async ({ request, params }) => {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function slugify(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
+const STEPS = ["Basic Info", "Access Control", "Products", "Review & Save"];
+
+// ─── Native form field components ────────────────────────────────────────────
+
+const inputStyle = {
+  padding: "6px 12px",
+  border: "1px solid #8c9196",
+  borderRadius: "4px",
+  fontSize: "14px",
+  color: "#202223",
+  background: "white",
+  width: "100%",
+  boxSizing: "border-box",
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: "14px",
+  fontWeight: 500,
+  color: "#202223",
+  marginBottom: "4px",
+};
+
+function Field({ label, type = "text", value, onChange, placeholder, required, min, style }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", ...style }}>
+      {label && <label style={labelStyle}>{label}</label>}
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        min={min}
+        style={inputStyle}
+      />
+    </div>
+  );
 }
 
-const STEPS = ["Basic Info", "Access Control", "Products", "Review & Save"];
+function Toggle({ label, checked, onChange }) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function Checkbox({ label, checked, onChange }) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "14px" }}>
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      <span>{label}</span>
+    </label>
+  );
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -151,6 +198,7 @@ export default function EditStorefront() {
   const productsFetcher = useFetcher();
 
   const [step, setStep] = useState(0);
+  const [stepError, setStepError] = useState("");
   const [form, setForm] = useState({
     name: storefront.name,
     companyName: storefront.companyName,
@@ -290,9 +338,14 @@ export default function EditStorefront() {
     saveFetcher.submit(form, { method: "post", encType: "application/json" });
   }
 
-  function canProceed() {
-    if (step === 0) return form.name.trim() && form.companyName.trim() && form.slug.trim();
-    return true;
+  function tryNext() {
+    if (step === 0) {
+      if (!form.name.trim()) { setStepError("Storefront name is required."); return; }
+      if (!form.companyName.trim()) { setStepError("Company name is required."); return; }
+      if (!form.slug.trim()) { setStepError("URL slug is required."); return; }
+    }
+    setStepError("");
+    setStep((s) => s + 1);
   }
 
   const storefrontUrl = `${appUrl.replace(/\/$/, "")}/s/${form.slug}`;
@@ -333,23 +386,23 @@ export default function EditStorefront() {
       {step === 0 && (
         <s-section heading="Basic Information">
           <s-stack direction="block" gap="base">
-            <s-text-field
+            <Field
               label="Storefront Name"
               value={form.name}
-              onInput={(e) => updateForm("name", e.target.value)}
+              onChange={(e) => updateForm("name", e.target.value)}
               required
             />
-            <s-text-field
+            <Field
               label="Company Name"
               value={form.companyName}
-              onInput={(e) => updateForm("companyName", e.target.value)}
+              onChange={(e) => updateForm("companyName", e.target.value)}
               required
             />
             <s-stack direction="block" gap="small-200">
-              <s-text-field
+              <Field
                 label="URL Slug"
                 value={form.slug}
-                onInput={(e) =>
+                onChange={(e) =>
                   updateForm("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
                 }
                 required
@@ -361,12 +414,13 @@ export default function EditStorefront() {
               </s-box>
             </s-stack>
             <s-stack direction="inline" gap="base">
-              <s-text-field
+              <Field
                 label="Primary Color (hex)"
                 value={form.primaryColor}
-                onInput={(e) => updateForm("primaryColor", e.target.value)}
+                onChange={(e) => updateForm("primaryColor", e.target.value)}
+                style={{ flex: 1 }}
               />
-              <s-box
+              <div
                 style={{
                   backgroundColor: form.primaryColor,
                   width: "40px",
@@ -375,24 +429,20 @@ export default function EditStorefront() {
                   border: "1px solid #ddd",
                   flexShrink: 0,
                   alignSelf: "flex-end",
-                  marginBottom: "4px",
                 }}
               />
             </s-stack>
-            <s-text-field
+            <Field
               label="Logo URL"
               value={form.logoUrl}
-              onInput={(e) => updateForm("logoUrl", e.target.value)}
+              onChange={(e) => updateForm("logoUrl", e.target.value)}
               placeholder="https://example.com/logo.png (optional)"
             />
-            <s-stack direction="inline" gap="base">
-              <s-text>Active</s-text>
-              <s-switch
-                label="Active"
-                checked={form.isActive}
-                onChange={(e) => updateForm("isActive", e.target.checked)}
-              />
-            </s-stack>
+            <Toggle
+              label="Active"
+              checked={form.isActive}
+              onChange={(e) => updateForm("isActive", e.target.checked)}
+            />
           </s-stack>
         </s-section>
       )}
@@ -415,20 +465,18 @@ export default function EditStorefront() {
 
             <s-box padding="base" borderWidth="base" borderRadius="base">
               <s-stack direction="block" gap="base">
-                <s-stack direction="inline" gap="base">
-                  <s-switch
-                    label="Password Protection"
-                    checked={form.passwordEnabled}
-                    onChange={(e) => updateForm("passwordEnabled", e.target.checked)}
-                  />
-                  <s-text>Password Protection</s-text>
-                </s-stack>
+                <Toggle
+                  label="Password Protection"
+                  checked={form.passwordEnabled}
+                  onChange={(e) => updateForm("passwordEnabled", e.target.checked)}
+                />
                 {form.passwordEnabled && (
                   <s-stack direction="block" gap="small-200">
-                    <s-password-field
+                    <Field
+                      type="password"
                       label="New Password (leave blank to keep existing)"
                       value={form.password}
-                      onInput={(e) => updateForm("password", e.target.value)}
+                      onChange={(e) => updateForm("password", e.target.value)}
                       placeholder="Enter new password or leave blank"
                     />
                     {storefront.password && !form.password && (
@@ -443,14 +491,11 @@ export default function EditStorefront() {
 
             <s-box padding="base" borderWidth="base" borderRadius="base">
               <s-stack direction="block" gap="base">
-                <s-stack direction="inline" gap="base">
-                  <s-switch
-                    label="Require Customer Login"
-                    checked={form.requireLogin}
-                    onChange={(e) => updateForm("requireLogin", e.target.checked)}
-                  />
-                  <s-text>Require Customer Login</s-text>
-                </s-stack>
+                <Toggle
+                  label="Require Customer Login"
+                  checked={form.requireLogin}
+                  onChange={(e) => updateForm("requireLogin", e.target.checked)}
+                />
                 {form.requireLogin && (
                   <s-banner tone="info">
                     Manage customers for this storefront from the{" "}
@@ -479,10 +524,11 @@ export default function EditStorefront() {
               <s-button onClick={deselectAllVisible}>Deselect All Visible</s-button>
             </s-stack>
 
-            <s-search-field
+            <Field
+              type="search"
               label="Search products"
               value={searchQuery}
-              onInput={(e) => handleSearch(e.target.value)}
+              onChange={(e) => handleSearch(e.target.value)}
               placeholder="Search by product name..."
             />
 
@@ -519,7 +565,7 @@ export default function EditStorefront() {
                     const sv = form.selectedVariants.find((v) => v.variantId === variant.id);
                     return (
                       <s-stack key={variant.id} direction="inline" gap="base">
-                        <s-checkbox
+                        <Checkbox
                           label={variant.title === "Default Title" ? "Default" : variant.title}
                           checked={selected}
                           onChange={() => toggleVariant(product, variant)}
@@ -528,10 +574,11 @@ export default function EditStorefront() {
                           ${parseFloat(variant.price).toFixed(2)}
                         </s-text>
                         {selected && (
-                          <s-number-field
+                          <Field
+                            type="number"
                             label="Custom price"
                             value={sv?.customPrice || ""}
-                            onInput={(e) => setCustomPrice(variant.id, e.target.value)}
+                            onChange={(e) => setCustomPrice(variant.id, e.target.value)}
                             placeholder={`Use store price ($${parseFloat(variant.price).toFixed(2)})`}
                             min="0"
                             style={{ maxWidth: "200px" }}
@@ -608,17 +655,22 @@ export default function EditStorefront() {
 
       {/* Navigation */}
       <s-section>
+        {stepError && (
+          <s-banner tone="critical" style={{ marginBottom: "8px" }}>
+            {stepError}
+          </s-banner>
+        )}
         <s-button-group>
           {step > 0 && (
-            <s-button onClick={() => setStep((s) => s - 1)} disabled={isSaving}>
+            <s-button onClick={() => { setStepError(""); setStep((s) => s - 1); }} disabled={isSaving}>
               Back
             </s-button>
           )}
           {step < STEPS.length - 1 && (
             <s-button
               variant="primary"
-              onClick={() => setStep((s) => s + 1)}
-              disabled={!canProceed()}
+              onClick={tryNext}
+              disabled={isSaving}
             >
               Next: {STEPS[step + 1]}
             </s-button>
