@@ -10,6 +10,9 @@ RUN npm ci
 
 COPY . .
 
+# Generate Prisma client before building so it's available in the server bundle
+RUN npx prisma generate
+
 # Build the app
 RUN npm run build
 
