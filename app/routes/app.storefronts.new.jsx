@@ -199,6 +199,8 @@ export default function NewStorefront() {
   const [searchQuery, setSearchQuery] = useState("");
   const searchTimeout = useRef(null);
 
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+
   // Customer form
   const [newCustomer, setNewCustomer] = useState({ email: "", name: "", password: "" });
 
@@ -242,7 +244,7 @@ export default function NewStorefront() {
     setForm((prev) => ({
       ...prev,
       companyName: value,
-      slug: prev.slug || slugify(value),
+      slug: slugManuallyEdited ? prev.slug : slugify(value),
     }));
   }
 
@@ -424,7 +426,10 @@ export default function NewStorefront() {
               <Field
                 label="URL Slug"
                 value={form.slug}
-                onChange={(e) => updateForm("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                onChange={(e) => {
+                  setSlugManuallyEdited(true);
+                  updateForm("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                }}
                 placeholder="e.g. acme-corp"
                 required
               />
