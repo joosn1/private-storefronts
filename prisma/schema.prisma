@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Storefront {
+  id           String   @id @default(cuid())
+  shopDomain   String
+  name         String
+  slug         String   @unique
+  companyName  String
+  logoUrl      String?
+  primaryColor String   @default("#000000")
+  password     String?
+  requireLogin Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  products  StorefrontProduct[]
+  customers StorefrontCustomer[]
+}
+
+model StorefrontProduct {
+  id               String     @id @default(cuid())
+  storefrontId     String
+  storefront       Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  shopifyProductId String
+  shopifyVariantId String
+  customPrice      Decimal?   @db.Decimal(10, 2)
+  isVisible        Boolean    @default(true)
+  sortOrder        Int        @default(0)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+}
+
+model StorefrontCustomer {
+  id           String     @id @default(cuid())
+  storefrontId String
+  storefront   Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  email        String
+  passwordHash String
+  name         String?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
