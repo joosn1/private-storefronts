@@ -9,9 +9,9 @@ import bcrypt from "bcryptjs";
 // ─── Server ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const appUrl = process.env.SHOPIFY_APP_URL || "";
-  return { appUrl };
+  return { appUrl, shop: session.shop };
 };
 
 export const action = async ({ request }) => {
@@ -170,7 +170,7 @@ function Checkbox({ label, checked, onChange }) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function NewStorefront() {
-  const { appUrl } = useLoaderData();
+  const { shop } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const saveFetcher = useFetcher();
@@ -367,7 +367,7 @@ export default function NewStorefront() {
     setStep((s) => s + 1);
   }
 
-  const storefrontUrl = `${appUrl.replace(/\/$/, "")}/s/${form.slug}`;
+  const storefrontUrl = form.slug ? `https://${shop}/apps/storefronts/${form.slug}` : "";
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (

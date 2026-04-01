@@ -23,8 +23,6 @@ export const loader = async ({ request, params }) => {
     throw new Response("Storefront not found", { status: 404 });
   }
 
-  const appUrl = process.env.SHOPIFY_APP_URL || "";
-
   return {
     storefront: {
       ...storefront,
@@ -44,7 +42,7 @@ export const loader = async ({ request, params }) => {
         createdAt: c.createdAt.toISOString(),
       })),
     },
-    appUrl,
+    shop: session.shop,
   };
 };
 
@@ -191,7 +189,7 @@ function Checkbox({ label, checked, onChange }) {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function EditStorefront() {
-  const { storefront, appUrl } = useLoaderData();
+  const { storefront, shop } = useLoaderData();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const saveFetcher = useFetcher();
@@ -348,7 +346,7 @@ export default function EditStorefront() {
     setStep((s) => s + 1);
   }
 
-  const storefrontUrl = `${appUrl.replace(/\/$/, "")}/s/${form.slug}`;
+  const storefrontUrl = form.slug ? `https://${shop}/apps/storefronts/${form.slug}` : "";
 
   return (
     <s-page heading={`Edit: ${storefront.name}`}>
