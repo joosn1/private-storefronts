@@ -799,22 +799,18 @@ export default function NewStorefront() {
             {stepError}
           </s-banner>
         )}
-        <s-button-group>
+        <div style={{ display: "flex", gap: "8px" }}>
           {step > 0 && (
             <s-button onClick={() => { setStepError(""); setStep((s) => s - 1); }} disabled={isSaving}>
               Back
             </s-button>
           )}
           {step < STEPS.length - 1 && (
-            <s-button
-              variant="primary"
-              onClick={tryNext}
-              disabled={isSaving}
-            >
+            <s-button variant="primary" onClick={tryNext} disabled={isSaving}>
               Next: {STEPS[step + 1]}
             </s-button>
           )}
-        </s-button-group>
+        </div>
       </s-section>
     </s-page>
   );
