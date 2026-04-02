@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -79,6 +79,7 @@ export default function Index() {
     useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
 
   const isLoading = fetcher.state !== "idle";
 
@@ -97,14 +98,26 @@ export default function Index() {
 
   return (
     <>
-      <s-page heading="Private Storefronts">
+      {/* Button is OUTSIDE s-page so shadow DOM cannot swallow clicks */}
+      <div style={{ padding: "16px 20px 0", display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={() => navigate("/app/storefronts/new")}
+          style={{
+            background: "#303030",
+            color: "#fff",
+            border: "none",
+            borderRadius: "8px",
+            padding: "12px 24px",
+            fontSize: "14px",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          + Create New Storefront
+        </button>
+      </div>
 
-        {/* Create button — React Router Link does client-side nav, no page reload */}
-        <s-section>
-          <Link to="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
-            + Create New Storefront
-          </Link>
-        </s-section>
+      <s-page heading="Private Storefronts">
 
         {/* Stats row */}
         <s-section heading="Overview">
@@ -138,9 +151,7 @@ export default function Index() {
                 No private storefronts yet. Create your first one to give B2B
                 clients a dedicated shopping experience.
               </s-paragraph>
-              <Link to="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
-                Create Your First Storefront
-              </Link>
+              <s-text>Use the button above to create your first storefront.</s-text>
             </s-stack>
           ) : (
             <s-table>
