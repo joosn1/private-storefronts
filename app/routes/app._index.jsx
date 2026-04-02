@@ -219,7 +219,14 @@ export default function Index() {
                       <s-text>{sf._count.customers}</s-text>
                     </s-table-cell>
                     <s-table-cell>
-                      <s-button-group>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        <s-button
+                          variant="primary"
+                          onClick={() => window.open(getProxyUrl(sf.slug), "_blank")}
+                          disabled={isLoading}
+                        >
+                          Preview
+                        </s-button>
                         <s-button
                           onClick={() => navigate(`/app/storefronts/${sf.id}/edit`)}
                           disabled={isLoading}
@@ -245,7 +252,7 @@ export default function Index() {
                         >
                           Delete
                         </s-button>
-                      </s-button-group>
+                      </div>
                     </s-table-cell>
                   </s-table-row>
                 ))}
