@@ -407,6 +407,12 @@ async function handleProxyLogin(req, res) {
 // ─── Server setup ─────────────────────────────────────────────────────────────
 
 const app = express();
+
+// Serve static client assets (JS bundles, CSS, images) — WITHOUT THIS, React
+// never loads in the browser and nothing interactive works.
+app.use("/assets", express.static("build/client/assets", { immutable: true, maxAge: "1y" }));
+app.use(express.static("build/client", { maxAge: "1h" }));
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
