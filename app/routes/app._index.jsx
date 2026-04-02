@@ -99,13 +99,23 @@ export default function Index() {
   return (
     <>
       <s-page heading="Private Storefronts">
-        <s-button
-          slot="primary-action"
-          variant="primary"
-          onClick={() => navigate("/app/storefronts/new")}
-        >
-          Create New Storefront
-        </s-button>
+        <div slot="primary-action">
+          <button
+            onClick={() => navigate("/app/storefronts/new")}
+            style={{
+              background: "#303030",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              padding: "8px 16px",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            + Create New Storefront
+          </button>
+        </div>
 
         {/* Stats row */}
         <s-section heading="Overview">
@@ -139,12 +149,21 @@ export default function Index() {
                 No private storefronts yet. Create your first one to give B2B
                 clients a dedicated shopping experience.
               </s-paragraph>
-              <s-button
-                variant="primary"
+              <button
                 onClick={() => navigate("/app/storefronts/new")}
+                style={{
+                  background: "#303030",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
               >
                 Create Your First Storefront
-              </s-button>
+              </button>
             </s-stack>
           ) : (
             <s-table>
