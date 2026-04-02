@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -79,7 +79,6 @@ export default function Index() {
     useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
-  const navigate = useNavigate();
 
   const isLoading = fetcher.state !== "idle";
 
@@ -100,10 +99,10 @@ export default function Index() {
     <>
       <s-page heading="Private Storefronts">
 
-        {/* Create button — placed in content, not a slot, so it always renders and navigate() fires */}
+        {/* Create button */}
         <s-section>
           <button
-            onClick={() => navigate("/app/storefronts/new")}
+            onClick={() => shopify.navigate("/app/storefronts/new")}
             style={{
               background: "#303030",
               color: "#fff",
@@ -152,7 +151,7 @@ export default function Index() {
                 clients a dedicated shopping experience.
               </s-paragraph>
               <button
-                onClick={() => navigate("/app/storefronts/new")}
+                onClick={() => shopify.navigate("/app/storefronts/new")}
                 style={{
                   background: "#303030",
                   color: "#fff",
