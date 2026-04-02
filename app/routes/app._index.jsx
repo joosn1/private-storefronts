@@ -99,23 +99,11 @@ export default function Index() {
     <>
       <s-page heading="Private Storefronts">
 
-        {/* Create button */}
+        {/* Create button — uses s-link, same component that works in the nav bar */}
         <s-section>
-          <button
-            onClick={() => shopify.navigate("/app/storefronts/new")}
-            style={{
-              background: "#303030",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              padding: "12px 24px",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
+          <s-link href="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none" }}>
             + Create New Storefront
-          </button>
+          </s-link>
         </s-section>
 
         {/* Stats row */}
@@ -150,21 +138,9 @@ export default function Index() {
                 No private storefronts yet. Create your first one to give B2B
                 clients a dedicated shopping experience.
               </s-paragraph>
-              <button
-                onClick={() => shopify.navigate("/app/storefronts/new")}
-                style={{
-                  background: "#303030",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  padding: "8px 16px",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
+              <s-link href="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none" }}>
                 Create Your First Storefront
-              </button>
+              </s-link>
             </s-stack>
           ) : (
             <s-table>
