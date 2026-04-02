@@ -26,8 +26,9 @@ export const loader = async ({ request, params }) => {
   const proxyBase = `https://${shop}/apps/storefronts/${slug}`;
 
   // Determine if this is the index path or a sub-route (auth/login)
+  // Shopify forwards /apps/storefronts/slug → our server receives /storefronts/slug
   const normalizedPath = url.pathname.replace(/\/$/, "");
-  const isIndex = normalizedPath === `/apps/storefronts/${slug}`;
+  const isIndex = normalizedPath === `/storefronts/${slug}`;
 
   if (!isIndex) {
     return {
