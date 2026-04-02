@@ -139,7 +139,6 @@ export default function Index() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const deleteModalRef = useRef(null);
-  const createBtnRef = useRef(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
   const isLoading = fetcher.state !== "idle";
@@ -152,16 +151,6 @@ export default function Index() {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
   }, [fetcher.data, shopify]);
-
-  // s-button renders correctly in the slot but its onClick is unreliable —
-  // attach a native listener directly to the element instead.
-  useEffect(() => {
-    const el = createBtnRef.current;
-    if (!el) return;
-    const handler = () => navigate("/app/storefronts/new");
-    el.addEventListener("click", handler);
-    return () => el.removeEventListener("click", handler);
-  }, [navigate]);
 
   function handleDeleteClick(storefront) {
     setPendingDelete(storefront);
@@ -192,11 +181,6 @@ export default function Index() {
   return (
     <>
       <s-page heading="Private Storefronts">
-        {/* s-button in slot renders correctly; native listener handles the click */}
-        <s-button ref={createBtnRef} slot="primary-action" variant="primary">
-          + Create New Storefront
-        </s-button>
-
         {/* Stats row */}
         <s-section heading="Overview">
           <s-stack direction="inline" gap="large">
@@ -223,6 +207,11 @@ export default function Index() {
 
         {/* Storefronts table — plain HTML so React onClick works reliably */}
         <s-section heading="Your Storefronts">
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "16px" }}>
+            <button style={btn.primary} onClick={() => navigate("/app/storefronts/new")}>
+              + Create New Storefront
+            </button>
+          </div>
           {storefronts.length === 0 ? (
             <s-stack direction="block" gap="base">
               <s-paragraph>
