@@ -74,6 +74,44 @@ export const action = async ({ request }) => {
   return { error: "Unknown action" };
 };
 
+// ─── Button helpers (native HTML — s-button onClick is unreliable in React) ───
+
+const btn = {
+  base: {
+    padding: "6px 14px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer",
+    border: "1px solid #ccc",
+    background: "#fff",
+    color: "#202020",
+    lineHeight: "1.4",
+  },
+  primary: {
+    padding: "8px 16px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer",
+    border: "none",
+    background: "#303030",
+    color: "#fff",
+    lineHeight: "1.4",
+  },
+  danger: {
+    padding: "6px 14px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer",
+    border: "none",
+    background: "#d82c0d",
+    color: "#fff",
+    lineHeight: "1.4",
+  },
+};
+
 export default function Index() {
   const { storefronts, totalProducts, totalCustomers, activeCount, appUrl, shop } =
     useLoaderData();
@@ -81,6 +119,7 @@ export default function Index() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const deleteModalRef = useRef(null);
+  const createBtnRef = useRef(null);
   const [pendingDelete, setPendingDelete] = useState(null);
 
   const isLoading = fetcher.state !== "idle";
@@ -93,6 +132,16 @@ export default function Index() {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
   }, [fetcher.data, shopify]);
+
+  // Native listener bypasses React event delegation which doesn't cross
+  // shadow DOM slot boundaries in Shopify web components.
+  useEffect(() => {
+    const el = createBtnRef.current;
+    if (!el) return;
+    const handler = () => navigate("/app/storefronts/new");
+    el.addEventListener("click", handler);
+    return () => el.removeEventListener("click", handler);
+  }, [navigate]);
 
   function handleDeleteClick(storefront) {
     setPendingDelete(storefront);
@@ -110,10 +159,6 @@ export default function Index() {
     fetcher.submit({ intent: "toggle", id: storefront.id }, { method: "post" });
   }
 
-  function getDirectUrl(slug) {
-    return `${appUrl.replace(/\/$/, "")}/s/${slug}`;
-  }
-
   function getProxyUrl(slug) {
     return `https://${shop}/apps/storefronts/${slug}`;
   }
@@ -127,13 +172,12 @@ export default function Index() {
   return (
     <>
       <s-page heading="Private Storefronts">
-        <s-button
-          slot="primary-action"
-          variant="primary"
-          onClick={() => navigate("/app/storefronts/new")}
-        >
-          Create New Storefront
-        </s-button>
+        {/* Native button in slot — s-button onClick doesn't fire reliably */}
+        <div slot="primary-action">
+          <button ref={createBtnRef} style={btn.primary}>
+            + Create New Storefront
+          </button>
+        </div>
 
         {/* Stats row */}
         <s-section heading="Overview">
@@ -167,12 +211,11 @@ export default function Index() {
                 No private storefronts yet. Create your first one to give B2B
                 clients a dedicated shopping experience.
               </s-paragraph>
-              <s-button
-                variant="primary"
-                onClick={() => navigate("/app/storefronts/new")}
-              >
-                Create Your First Storefront
-              </s-button>
+              <div>
+                <button style={btn.primary} onClick={() => navigate("/app/storefronts/new")}>
+                  Create Your First Storefront
+                </button>
+              </div>
             </s-stack>
           ) : (
             <s-table>
@@ -197,15 +240,15 @@ export default function Index() {
                       <s-text>{sf.companyName}</s-text>
                     </s-table-cell>
                     <s-table-cell>
-                      <s-stack direction="block" gap="small-400">
-                        <s-text>{sf.slug}</s-text>
-                        <s-text style={{ fontSize: "12px", color: "#666" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 600 }}>{sf.slug}</span>
+                        <span style={{ fontSize: "11px", color: "#666", wordBreak: "break-all" }}>
                           {getProxyUrl(sf.slug)}
-                        </s-text>
-                        <s-button onClick={() => copyUrl(sf.slug)}>
-                          Copy Proxy URL
-                        </s-button>
-                      </s-stack>
+                        </span>
+                        <button style={{ ...btn.base, fontSize: "12px", padding: "4px 10px" }} onClick={() => copyUrl(sf.slug)}>
+                          Copy URL
+                        </button>
+                      </div>
                     </s-table-cell>
                     <s-table-cell>
                       <s-badge tone={sf.isActive ? "success" : "neutral"}>
@@ -220,38 +263,38 @@ export default function Index() {
                     </s-table-cell>
                     <s-table-cell>
                       <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                        <s-button
-                          variant="primary"
+                        <button
+                          style={btn.primary}
                           onClick={() => window.open(getProxyUrl(sf.slug), "_blank")}
-                          disabled={isLoading}
                         >
                           Preview
-                        </s-button>
-                        <s-button
+                        </button>
+                        <button
+                          style={btn.base}
                           onClick={() => navigate(`/app/storefronts/${sf.id}/edit`)}
-                          disabled={isLoading}
                         >
                           Edit
-                        </s-button>
-                        <s-button
+                        </button>
+                        <button
+                          style={btn.base}
                           onClick={() => navigate(`/app/storefronts/${sf.id}/customers`)}
-                          disabled={isLoading}
                         >
                           Customers
-                        </s-button>
-                        <s-button
+                        </button>
+                        <button
+                          style={btn.base}
                           onClick={() => handleToggle(sf)}
                           disabled={isLoading}
                         >
                           {sf.isActive ? "Deactivate" : "Activate"}
-                        </s-button>
-                        <s-button
-                          tone="critical"
+                        </button>
+                        <button
+                          style={btn.danger}
                           onClick={() => handleDeleteClick(sf)}
                           disabled={isLoading}
                         >
                           Delete
-                        </s-button>
+                        </button>
                       </div>
                     </s-table-cell>
                   </s-table-row>
@@ -274,18 +317,14 @@ export default function Index() {
           the storefront, all configured products, and all customer accounts.
           This action cannot be undone.
         </s-paragraph>
-        <s-button-group slot="primary-action">
-          <s-button
-            tone="critical"
-            variant="primary"
-            onClick={handleDeleteConfirm}
-          >
+        <div slot="primary-action" style={{ display: "flex", gap: "8px" }}>
+          <button style={btn.danger} onClick={handleDeleteConfirm}>
             Delete Storefront
-          </s-button>
-          <s-button onClick={() => deleteModalRef.current?.hideOverlay()}>
+          </button>
+          <button style={btn.base} onClick={() => deleteModalRef.current?.hideOverlay()}>
             Cancel
-          </s-button>
-        </s-button-group>
+          </button>
+        </div>
       </s-modal>
     </>
   );
