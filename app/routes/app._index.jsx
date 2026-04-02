@@ -99,23 +99,22 @@ export default function Index() {
   return (
     <>
       <s-page heading="Private Storefronts">
-        <div slot="primary-action">
-          <button
-            onClick={() => navigate("/app/storefronts/new")}
-            style={{
-              background: "#303030",
-              color: "#fff",
-              border: "none",
-              borderRadius: "6px",
-              padding: "8px 16px",
-              fontSize: "13px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            + Create New Storefront
-          </button>
-        </div>
+        <button
+          slot="primary-action"
+          onClick={() => navigate("/app/storefronts/new")}
+          style={{
+            background: "#303030",
+            color: "#fff",
+            border: "none",
+            borderRadius: "6px",
+            padding: "8px 16px",
+            fontSize: "13px",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          + Create New Storefront
+        </button>
 
         {/* Stats row */}
         <s-section heading="Overview">
