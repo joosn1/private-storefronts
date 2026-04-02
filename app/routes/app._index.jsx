@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -66,43 +66,49 @@ export const action = async ({ request }) => {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const btn = {
-  base: {
-    padding: "7px 14px",
-    borderRadius: "6px",
-    fontSize: "13px",
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "1px solid #babfc3",
-    background: "#ffffff",
-    color: "#202020",
-    lineHeight: "1.4",
-    display: "inline-block",
-  },
-  primary: {
-    padding: "8px 16px",
-    borderRadius: "6px",
-    fontSize: "13px",
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "none",
-    background: "#303030",
-    color: "#ffffff",
-    lineHeight: "1.4",
-    display: "inline-block",
-  },
-  danger: {
-    padding: "7px 14px",
-    borderRadius: "6px",
-    fontSize: "13px",
-    fontWeight: 600,
-    cursor: "pointer",
-    border: "none",
-    background: "#d82c0d",
-    color: "#ffffff",
-    lineHeight: "1.4",
-    display: "inline-block",
-  },
+const btnBase = {
+  padding: "7px 14px",
+  borderRadius: "6px",
+  fontSize: "13px",
+  fontWeight: 600,
+  cursor: "pointer",
+  border: "1px solid #babfc3",
+  background: "#ffffff",
+  color: "#202020",
+  lineHeight: "1.4",
+  textDecoration: "none",
+  display: "inline-block",
+  boxSizing: "border-box",
+};
+
+const btnPrimary = {
+  padding: "8px 16px",
+  borderRadius: "6px",
+  fontSize: "13px",
+  fontWeight: 600,
+  cursor: "pointer",
+  border: "none",
+  background: "#303030",
+  color: "#ffffff",
+  lineHeight: "1.4",
+  textDecoration: "none",
+  display: "inline-block",
+  boxSizing: "border-box",
+};
+
+const btnDanger = {
+  padding: "7px 14px",
+  borderRadius: "6px",
+  fontSize: "13px",
+  fontWeight: 600,
+  cursor: "pointer",
+  border: "none",
+  background: "#d82c0d",
+  color: "#ffffff",
+  lineHeight: "1.4",
+  textDecoration: "none",
+  display: "inline-block",
+  boxSizing: "border-box",
 };
 
 const thStyle = {
@@ -133,7 +139,6 @@ export default function Index() {
     useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
-  const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState(null);
 
   const isLoading = fetcher.state !== "idle";
@@ -146,10 +151,6 @@ export default function Index() {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
   }, [fetcher.data, shopify]);
-
-  function handleDeleteClick(storefront) {
-    setPendingDelete(storefront);
-  }
 
   function handleDeleteConfirm() {
     if (!pendingDelete) return;
@@ -179,9 +180,9 @@ export default function Index() {
         <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 700, color: "#202020" }}>
           Private Storefronts
         </h1>
-        <button style={btn.primary} onClick={() => navigate("/app/storefronts/new")}>
+        <a href="/app/storefronts/new" style={btnPrimary}>
           + Create New Storefront
-        </button>
+        </a>
       </div>
 
       {/* Stats */}
@@ -209,9 +210,9 @@ export default function Index() {
             <p style={{ marginBottom: "20px", fontSize: "14px" }}>
               No private storefronts yet. Create your first one to give B2B clients a dedicated shopping experience.
             </p>
-            <button style={btn.primary} onClick={() => navigate("/app/storefronts/new")}>
+            <a href="/app/storefronts/new" style={btnPrimary}>
               Create Your First Storefront
-            </button>
+            </a>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -241,7 +242,8 @@ export default function Index() {
                           {getProxyUrl(sf.slug)}
                         </span>
                         <button
-                          style={{ ...btn.base, fontSize: "12px", padding: "3px 8px" }}
+                          type="button"
+                          style={{ ...btnBase, fontSize: "12px", padding: "3px 8px" }}
                           onClick={() => copyUrl(sf.slug)}
                         >
                           Copy URL
@@ -264,29 +266,33 @@ export default function Index() {
                     <td style={tdStyle}>{sf._count.products}</td>
                     <td style={tdStyle}>{sf._count.customers}</td>
                     <td style={tdStyle}>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                        <button
-                          style={btn.primary}
-                          onClick={() => window.open(getProxyUrl(sf.slug), "_blank")}
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                        <a
+                          href={getProxyUrl(sf.slug)}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={btnPrimary}
                         >
                           Preview
-                        </button>
-                        <button
-                          style={btn.base}
-                          onClick={() => navigate(`/app/storefronts/${sf.id}/edit`)}
+                        </a>
+                        <a
+                          href={`/app/storefronts/${sf.id}/edit`}
+                          style={btnBase}
                         >
                           Edit
-                        </button>
+                        </a>
                         <button
-                          style={btn.base}
+                          type="button"
+                          style={btnBase}
                           onClick={() => handleToggle(sf)}
                           disabled={isLoading}
                         >
                           {sf.isActive ? "Deactivate" : "Activate"}
                         </button>
                         <button
-                          style={btn.danger}
-                          onClick={() => handleDeleteClick(sf)}
+                          type="button"
+                          style={btnDanger}
+                          onClick={() => setPendingDelete(sf)}
                           disabled={isLoading}
                         >
                           Delete
@@ -301,7 +307,7 @@ export default function Index() {
         )}
       </div>
 
-      {/* Delete confirmation modal — pure React, no web components */}
+      {/* Delete confirmation — pure React overlay, no web components */}
       {pendingDelete && (
         <div
           style={{
@@ -327,15 +333,16 @@ export default function Index() {
               Delete Storefront
             </h2>
             <p style={{ margin: "0 0 24px", fontSize: "14px", color: "#6d7175", lineHeight: "1.5" }}>
-              Are you sure you want to delete <strong style={{ color: "#202020" }}>{pendingDelete.name}</strong>?
+              Are you sure you want to delete{" "}
+              <strong style={{ color: "#202020" }}>{pendingDelete.name}</strong>?
               This will permanently remove the storefront, all configured products, and all customer accounts.
               This action cannot be undone.
             </p>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button style={btn.base} onClick={() => setPendingDelete(null)}>
+              <button type="button" style={btnBase} onClick={() => setPendingDelete(null)}>
                 Cancel
               </button>
-              <button style={btn.danger} onClick={handleDeleteConfirm}>
+              <button type="button" style={btnDanger} onClick={handleDeleteConfirm}>
                 Delete Storefront
               </button>
             </div>
