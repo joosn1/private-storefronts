@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -99,11 +99,11 @@ export default function Index() {
     <>
       <s-page heading="Private Storefronts">
 
-        {/* Create button — uses s-link, same component that works in the nav bar */}
+        {/* Create button — React Router Link does client-side nav, no page reload */}
         <s-section>
-          <s-link href="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none" }}>
+          <Link to="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
             + Create New Storefront
-          </s-link>
+          </Link>
         </s-section>
 
         {/* Stats row */}
@@ -138,9 +138,9 @@ export default function Index() {
                 No private storefronts yet. Create your first one to give B2B
                 clients a dedicated shopping experience.
               </s-paragraph>
-              <s-link href="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none" }}>
+              <Link to="/app/storefronts/new" style={{ display: "inline-block", background: "#303030", color: "#fff", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
                 Create Your First Storefront
-              </s-link>
+              </Link>
             </s-stack>
           ) : (
             <s-table>
