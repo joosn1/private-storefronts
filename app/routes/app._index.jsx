@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -139,6 +139,7 @@ export default function Index() {
     useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState(null);
 
   const isLoading = fetcher.state !== "idle";
@@ -180,9 +181,9 @@ export default function Index() {
         <h1 style={{ margin: 0, fontSize: "20px", fontWeight: 700, color: "#202020" }}>
           Private Storefronts
         </h1>
-        <a href="/app/storefronts/new" style={btnPrimary}>
+        <button type="button" style={btnPrimary} onClick={() => navigate("/app/storefronts/new")}>
           + Create New Storefront
-        </a>
+        </button>
       </div>
 
       {/* Stats */}
@@ -210,9 +211,9 @@ export default function Index() {
             <p style={{ marginBottom: "20px", fontSize: "14px" }}>
               No private storefronts yet. Create your first one to give B2B clients a dedicated shopping experience.
             </p>
-            <a href="/app/storefronts/new" style={btnPrimary}>
+            <button type="button" style={btnPrimary} onClick={() => navigate("/app/storefronts/new")}>
               Create Your First Storefront
-            </a>
+            </button>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -275,12 +276,22 @@ export default function Index() {
                         >
                           Preview
                         </a>
-                        <a
-                          href={`/app/storefronts/${sf.id}/edit`}
+                        <button
+                          type="button"
                           style={btnBase}
+                          onClick={() => navigate(`/app/storefronts/${sf.id}/edit`)}
+                          disabled={isLoading}
                         >
                           Edit
-                        </a>
+                        </button>
+                        <button
+                          type="button"
+                          style={btnBase}
+                          onClick={() => navigate(`/app/storefronts/${sf.id}/customers`)}
+                          disabled={isLoading}
+                        >
+                          Customers
+                        </button>
                         <button
                           type="button"
                           style={btnBase}
