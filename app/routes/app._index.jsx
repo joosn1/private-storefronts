@@ -26,7 +26,6 @@ export const loader = async ({ request }) => {
     0,
   );
   const activeCount = storefronts.filter((s) => s.isActive).length;
-  const appUrl = process.env.SHOPIFY_APP_URL || "";
 
   return {
     storefronts: storefronts.map((s) => ({
@@ -37,7 +36,6 @@ export const loader = async ({ request }) => {
     totalProducts,
     totalCustomers,
     activeCount,
-    appUrl,
     shop,
   };
 };
@@ -74,7 +72,7 @@ export const action = async ({ request }) => {
   return { error: "Unknown action" };
 };
 
-// ─── Button helpers (native HTML — s-button onClick is unreliable in React) ───
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const btn = {
   base: {
@@ -112,8 +110,30 @@ const btn = {
   },
 };
 
+const thStyle = {
+  padding: "10px 12px",
+  textAlign: "left",
+  fontWeight: 600,
+  fontSize: "12px",
+  color: "#6d7175",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  whiteSpace: "nowrap",
+  borderBottom: "2px solid #e1e3e5",
+};
+
+const tdStyle = {
+  padding: "12px",
+  verticalAlign: "middle",
+  fontSize: "13px",
+  color: "#202020",
+  borderBottom: "1px solid #e1e3e5",
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function Index() {
-  const { storefronts, totalProducts, totalCustomers, activeCount, appUrl, shop } =
+  const { storefronts, totalProducts, totalCustomers, activeCount, shop } =
     useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
@@ -133,8 +153,8 @@ export default function Index() {
     }
   }, [fetcher.data, shopify]);
 
-  // Native listener bypasses React event delegation which doesn't cross
-  // shadow DOM slot boundaries in Shopify web components.
+  // s-button renders correctly in the slot but its onClick is unreliable —
+  // attach a native listener directly to the element instead.
   useEffect(() => {
     const el = createBtnRef.current;
     if (!el) return;
@@ -172,12 +192,10 @@ export default function Index() {
   return (
     <>
       <s-page heading="Private Storefronts">
-        {/* Native button in slot — s-button onClick doesn't fire reliably */}
-        <div slot="primary-action">
-          <button ref={createBtnRef} style={btn.primary}>
-            + Create New Storefront
-          </button>
-        </div>
+        {/* s-button in slot renders correctly; native listener handles the click */}
+        <s-button ref={createBtnRef} slot="primary-action" variant="primary">
+          + Create New Storefront
+        </s-button>
 
         {/* Stats row */}
         <s-section heading="Overview">
@@ -203,7 +221,7 @@ export default function Index() {
           </s-stack>
         </s-section>
 
-        {/* Storefronts table */}
+        {/* Storefronts table — plain HTML so React onClick works reliably */}
         <s-section heading="Your Storefronts">
           {storefronts.length === 0 ? (
             <s-stack direction="block" gap="base">
@@ -212,95 +230,97 @@ export default function Index() {
                 clients a dedicated shopping experience.
               </s-paragraph>
               <div>
-                <button style={btn.primary} onClick={() => navigate("/app/storefronts/new")}>
+                <button
+                  style={btn.primary}
+                  onClick={() => navigate("/app/storefronts/new")}
+                >
                   Create Your First Storefront
                 </button>
               </div>
             </s-stack>
           ) : (
-            <s-table>
-              <s-table-header>
-                <s-table-header-row>
-                  <s-table-cell>Name</s-table-cell>
-                  <s-table-cell>Company</s-table-cell>
-                  <s-table-cell>Slug / URL</s-table-cell>
-                  <s-table-cell>Status</s-table-cell>
-                  <s-table-cell>Products</s-table-cell>
-                  <s-table-cell>Customers</s-table-cell>
-                  <s-table-cell>Actions</s-table-cell>
-                </s-table-header-row>
-              </s-table-header>
-              <s-table-body>
-                {storefronts.map((sf) => (
-                  <s-table-row key={sf.id}>
-                    <s-table-cell>
-                      <s-text>{sf.name}</s-text>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-text>{sf.companyName}</s-text>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                        <span style={{ fontSize: "13px", fontWeight: 600 }}>{sf.slug}</span>
-                        <span style={{ fontSize: "11px", color: "#666", wordBreak: "break-all" }}>
-                          {getProxyUrl(sf.slug)}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Company</th>
+                    <th style={thStyle}>Slug / URL</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={thStyle}>Products</th>
+                    <th style={thStyle}>Customers</th>
+                    <th style={thStyle}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {storefronts.map((sf) => (
+                    <tr key={sf.id}>
+                      <td style={tdStyle}>{sf.name}</td>
+                      <td style={tdStyle}>{sf.companyName}</td>
+                      <td style={tdStyle}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <span style={{ fontWeight: 600 }}>{sf.slug}</span>
+                          <span style={{ fontSize: "11px", color: "#666", wordBreak: "break-all" }}>
+                            {getProxyUrl(sf.slug)}
+                          </span>
+                          <button
+                            style={{ ...btn.base, fontSize: "12px", padding: "4px 10px" }}
+                            onClick={() => copyUrl(sf.slug)}
+                          >
+                            Copy URL
+                          </button>
+                        </div>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          display: "inline-block",
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          background: sf.isActive ? "#e3f1df" : "#f0f0f0",
+                          color: sf.isActive ? "#1a6631" : "#6d7175",
+                        }}>
+                          {sf.isActive ? "Active" : "Inactive"}
                         </span>
-                        <button style={{ ...btn.base, fontSize: "12px", padding: "4px 10px" }} onClick={() => copyUrl(sf.slug)}>
-                          Copy URL
-                        </button>
-                      </div>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-badge tone={sf.isActive ? "success" : "neutral"}>
-                        {sf.isActive ? "Active" : "Inactive"}
-                      </s-badge>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-text>{sf._count.products}</s-text>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <s-text>{sf._count.customers}</s-text>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                        <button
-                          style={btn.primary}
-                          onClick={() => window.open(getProxyUrl(sf.slug), "_blank")}
-                        >
-                          Preview
-                        </button>
-                        <button
-                          style={btn.base}
-                          onClick={() => navigate(`/app/storefronts/${sf.id}/edit`)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          style={btn.base}
-                          onClick={() => navigate(`/app/storefronts/${sf.id}/customers`)}
-                        >
-                          Customers
-                        </button>
-                        <button
-                          style={btn.base}
-                          onClick={() => handleToggle(sf)}
-                          disabled={isLoading}
-                        >
-                          {sf.isActive ? "Deactivate" : "Activate"}
-                        </button>
-                        <button
-                          style={btn.danger}
-                          onClick={() => handleDeleteClick(sf)}
-                          disabled={isLoading}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </s-table-cell>
-                  </s-table-row>
-                ))}
-              </s-table-body>
-            </s-table>
+                      </td>
+                      <td style={tdStyle}>{sf._count.products}</td>
+                      <td style={tdStyle}>{sf._count.customers}</td>
+                      <td style={tdStyle}>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                          <button
+                            style={btn.primary}
+                            onClick={() => window.open(getProxyUrl(sf.slug), "_blank")}
+                          >
+                            Preview
+                          </button>
+                          <button
+                            style={btn.base}
+                            onClick={() => navigate(`/app/storefronts/${sf.id}/edit`)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            style={btn.base}
+                            onClick={() => handleToggle(sf)}
+                            disabled={isLoading}
+                          >
+                            {sf.isActive ? "Deactivate" : "Activate"}
+                          </button>
+                          <button
+                            style={btn.danger}
+                            onClick={() => handleDeleteClick(sf)}
+                            disabled={isLoading}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </s-section>
       </s-page>
