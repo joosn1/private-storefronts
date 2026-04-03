@@ -414,8 +414,22 @@ async function handleProxyCheckout(req, res) {
     // Attach logged-in customer email
     if (customerEmail) draftOrderInput.email = customerEmail;
 
-    // Attach linked Shopify customer if configured on this storefront
-    if (storefront.shopifyCustomerId) {
+    // Attach linked Shopify company or customer if configured on this storefront
+    if (storefront.shopifyCompanyId && storefront.shopifyCompanyLocationId) {
+      const companyNumId = numericId(storefront.shopifyCompanyId);
+      const locationNumId = numericId(storefront.shopifyCompanyLocationId);
+      if (companyNumId && locationNumId) {
+        const purchasingCompany = {
+          company_id: companyNumId,
+          company_location_id: locationNumId,
+        };
+        if (storefront.shopifyCompanyContactId) {
+          const contactNumId = numericId(storefront.shopifyCompanyContactId);
+          if (contactNumId) purchasingCompany.company_contact_id = contactNumId;
+        }
+        draftOrderInput.purchasing_entity = { purchasing_company: purchasingCompany };
+      }
+    } else if (storefront.shopifyCustomerId) {
       const custNumId = numericId(storefront.shopifyCustomerId);
       if (custNumId) draftOrderInput.customer = { id: custNumId };
     }

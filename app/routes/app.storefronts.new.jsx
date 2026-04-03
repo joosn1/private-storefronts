@@ -26,7 +26,8 @@ export const action = async ({ request }) => {
 
   const { name, companyName, slug, primaryColor, logoUrl, isActive,
           passwordEnabled, password, requireLogin, customers, selectedVariants,
-          shopifyCustomerId } = body;
+          shopifyCustomerId, shopifyCompanyId, shopifyCompanyLocationId,
+          shopifyCompanyContactId } = body;
 
   // Validate required fields
   if (!name?.trim()) return { error: "Storefront name is required" };
@@ -63,6 +64,9 @@ export const action = async ({ request }) => {
       requireLogin: !!requireLogin,
       isActive: isActive !== false,
       shopifyCustomerId: shopifyCustomerId || null,
+      shopifyCompanyId: shopifyCompanyId || null,
+      shopifyCompanyLocationId: shopifyCompanyLocationId || null,
+      shopifyCompanyContactId: shopifyCompanyContactId || null,
     },
   });
 
@@ -184,6 +188,7 @@ export default function NewStorefront() {
   const productsFetcher = useFetcher();
 
   const customerFetcher = useFetcher();
+  const companyFetcher = useFetcher();
 
   const [step, setStep] = useState(0);
   const [stepError, setStepError] = useState("");
@@ -200,15 +205,22 @@ export default function NewStorefront() {
     customers: [],
     selectedVariants: [],
     shopifyCustomerId: null,
-    linkedCustomer: null,
+    shopifyCompanyId: null,
+    shopifyCompanyLocationId: null,
+    shopifyCompanyContactId: null,
+    linkedEntity: null,   // { type: "customer"|"company", id, name, email?, company?, locationId?, contactId? }
   });
 
-  // Customer search state
+  // Linked entity search state
+  const [linkedTab, setLinkedTab] = useState("customer"); // "customer" | "company"
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState([]);
   const customerSearchTimeout = useRef(null);
-  const customerInputRef = useRef(null);
-  const [customerDropdownPos, setCustomerDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyResults, setCompanyResults] = useState([]);
+  const companySearchTimeout = useRef(null);
+  const linkedInputRef = useRef(null);
+  const [linkedDropdownPos, setLinkedDropdownPos] = useState({ top: 0, left: 0, width: 0 });
 
   // Product loading state
   const [products, setProducts] = useState([]);
@@ -246,43 +258,89 @@ export default function NewStorefront() {
     }
   }, [step]);
 
-  // ── Customer search ───────────────────────────────────────────────────────
+  // ── Linked entity search ─────────────────────────────────────────────────
+  function measureInput() {
+    if (linkedInputRef.current) {
+      const rect = linkedInputRef.current.getBoundingClientRect();
+      setLinkedDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
+    }
+  }
+
   useEffect(() => {
     if (customerFetcher.data?.customers) {
       setCustomerResults(customerFetcher.data.customers);
-      // Re-measure input position when results arrive (handles scroll shifts)
-      if (customerInputRef.current) {
-        const rect = customerInputRef.current.getBoundingClientRect();
-        setCustomerDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
-      }
+      measureInput();
     }
   }, [customerFetcher.data]);
+
+  useEffect(() => {
+    if (companyFetcher.data?.companies) {
+      setCompanyResults(companyFetcher.data.companies);
+      measureInput();
+    }
+  }, [companyFetcher.data]);
 
   function handleCustomerSearch(value) {
     setCustomerSearch(value);
     setCustomerResults([]);
     clearTimeout(customerSearchTimeout.current);
     if (!value.trim()) return;
-    // Capture input position so fixed dropdown aligns correctly
-    if (customerInputRef.current) {
-      const rect = customerInputRef.current.getBoundingClientRect();
-      setCustomerDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
-    }
+    measureInput();
     customerSearchTimeout.current = setTimeout(() => {
       customerFetcher.load(`/app/storefronts/customer-search?q=${encodeURIComponent(value)}`);
     }, 300);
   }
 
+  function handleCompanySearch(value) {
+    setCompanySearch(value);
+    setCompanyResults([]);
+    clearTimeout(companySearchTimeout.current);
+    if (!value.trim()) return;
+    measureInput();
+    companySearchTimeout.current = setTimeout(() => {
+      companyFetcher.load(`/app/storefronts/company-search?q=${encodeURIComponent(value)}`);
+    }, 300);
+  }
+
   function selectCustomer(c) {
-    setForm((prev) => ({ ...prev, shopifyCustomerId: c.id, linkedCustomer: c }));
+    setForm((prev) => ({
+      ...prev,
+      shopifyCustomerId: c.id,
+      shopifyCompanyId: null,
+      shopifyCompanyLocationId: null,
+      shopifyCompanyContactId: null,
+      linkedEntity: { type: "customer", id: c.id, name: c.name, email: c.email, company: c.company },
+    }));
     setCustomerSearch("");
     setCustomerResults([]);
   }
 
-  function clearCustomer() {
-    setForm((prev) => ({ ...prev, shopifyCustomerId: null, linkedCustomer: null }));
+  function selectCompany(c) {
+    setForm((prev) => ({
+      ...prev,
+      shopifyCustomerId: null,
+      shopifyCompanyId: c.id,
+      shopifyCompanyLocationId: c.locationId || null,
+      shopifyCompanyContactId: c.contactId || null,
+      linkedEntity: { type: "company", id: c.id, name: c.name, locationName: c.locationName, contactName: c.contactName, contactEmail: c.contactEmail },
+    }));
+    setCompanySearch("");
+    setCompanyResults([]);
+  }
+
+  function clearLinkedEntity() {
+    setForm((prev) => ({
+      ...prev,
+      shopifyCustomerId: null,
+      shopifyCompanyId: null,
+      shopifyCompanyLocationId: null,
+      shopifyCompanyContactId: null,
+      linkedEntity: null,
+    }));
     setCustomerSearch("");
     setCustomerResults([]);
+    setCompanySearch("");
+    setCompanyResults([]);
   }
 
   // ── Toast on save error / navigate on success ─────────────────────────────
@@ -550,42 +608,89 @@ export default function NewStorefront() {
               onChange={(e) => updateForm("isActive", e.target.checked)}
             />
 
-            {/* Linked Shopify Customer */}
+            {/* Linked Shopify Customer or Company */}
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-              <label style={labelStyle}>Linked Customer (optional)</label>
-              <p style={{ margin: "0 0 6px", fontSize: "13px", color: "#6d7175" }}>
-                Attach a Shopify customer to this storefront so draft orders are automatically associated with them.
+              <label style={labelStyle}>Linked Customer / Company (optional)</label>
+              <p style={{ margin: "0 0 8px", fontSize: "13px", color: "#6d7175" }}>
+                Attach a Shopify customer or company so draft orders are automatically associated with them.
               </p>
-              {form.linkedCustomer ? (
+              {form.linkedEntity ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", background: "#f1f8f5", border: "1px solid #b5e0ca", borderRadius: "6px" }}>
-                  <span style={{ fontSize: "14px", color: "#202223", flex: 1 }}>
-                    ✓ <strong>{form.linkedCustomer.name || form.linkedCustomer.email}</strong>
-                    {form.linkedCustomer.company && ` — ${form.linkedCustomer.company}`}
-                    <span style={{ color: "#6d7175", marginLeft: "6px" }}>{form.linkedCustomer.email}</span>
+                  <span style={{ fontSize: "12px", fontWeight: 600, padding: "2px 7px", borderRadius: "10px", background: form.linkedEntity.type === "company" ? "#e3f0ff" : "#f1f8f5", color: form.linkedEntity.type === "company" ? "#1a73e8" : "#2a7a55", border: `1px solid ${form.linkedEntity.type === "company" ? "#b3d4f7" : "#b5e0ca"}` }}>
+                    {form.linkedEntity.type === "company" ? "Company" : "Customer"}
                   </span>
-                  <button onClick={clearCustomer} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: "13px" }}>Remove</button>
+                  <span style={{ fontSize: "14px", color: "#202223", flex: 1 }}>
+                    <strong>{form.linkedEntity.name || form.linkedEntity.email}</strong>
+                    {form.linkedEntity.type === "company" && form.linkedEntity.locationName && (
+                      <span style={{ color: "#6d7175", fontSize: "13px" }}> — {form.linkedEntity.locationName}</span>
+                    )}
+                    {form.linkedEntity.type === "company" && form.linkedEntity.contactEmail && (
+                      <div style={{ fontSize: "12px", color: "#6d7175" }}>Contact: {form.linkedEntity.contactName || form.linkedEntity.contactEmail}</div>
+                    )}
+                    {form.linkedEntity.type === "customer" && (
+                      <span style={{ color: "#6d7175", marginLeft: "6px", fontSize: "13px" }}>{form.linkedEntity.email}</span>
+                    )}
+                  </span>
+                  <button onClick={clearLinkedEntity} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: "13px" }}>Remove</button>
                 </div>
               ) : (
                 <div>
-                  <input
-                    ref={customerInputRef}
-                    type="search"
-                    value={customerSearch}
-                    onChange={(e) => handleCustomerSearch(e.target.value)}
-                    placeholder="Search by name or email..."
-                    style={{ padding: "6px 12px", border: "1px solid #8c9196", borderRadius: "4px", fontSize: "14px", width: "100%", boxSizing: "border-box" }}
-                  />
-                  {customerResults.length > 0 && (
-                    <div style={{ position: "fixed", top: customerDropdownPos.top, left: customerDropdownPos.left, width: customerDropdownPos.width, zIndex: 99999, background: "white", border: "1px solid #ddd", borderRadius: "4px", boxShadow: "0 4px 12px rgba(0,0,0,.15)", maxHeight: "220px", overflowY: "auto" }}>
-                      {customerResults.map((c) => (
-                        <div key={c.id} onClick={() => selectCustomer(c)} style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid #f1f1f1", fontSize: "14px" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "#f6f6f7"}
-                          onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
-                          <strong>{c.name || "(no name)"}</strong>
-                          {c.company && <span style={{ color: "#6d7175" }}> — {c.company}</span>}
-                          <div style={{ fontSize: "12px", color: "#6d7175" }}>{c.email}</div>
+                  {/* Tab switcher */}
+                  <div style={{ display: "flex", gap: "0", marginBottom: "8px", border: "1px solid #8c9196", borderRadius: "4px", overflow: "hidden", width: "fit-content" }}>
+                    {["customer", "company"].map((tab) => (
+                      <button key={tab} onClick={() => { setLinkedTab(tab); setCustomerSearch(""); setCustomerResults([]); setCompanySearch(""); setCompanyResults([]); }}
+                        style={{ padding: "5px 14px", fontSize: "13px", fontWeight: linkedTab === tab ? 600 : 400, background: linkedTab === tab ? "#f0f0f0" : "white", border: "none", borderRight: tab === "customer" ? "1px solid #8c9196" : "none", cursor: "pointer", color: "#202223" }}>
+                        {tab === "customer" ? "Customer" : "Company"}
+                      </button>
+                    ))}
+                  </div>
+                  {linkedTab === "customer" ? (
+                    <div>
+                      <input
+                        ref={linkedInputRef}
+                        type="search"
+                        value={customerSearch}
+                        onChange={(e) => handleCustomerSearch(e.target.value)}
+                        placeholder="Search by name or email..."
+                        style={{ padding: "6px 12px", border: "1px solid #8c9196", borderRadius: "4px", fontSize: "14px", width: "100%", boxSizing: "border-box" }}
+                      />
+                      {customerResults.length > 0 && (
+                        <div style={{ position: "fixed", top: linkedDropdownPos.top, left: linkedDropdownPos.left, width: linkedDropdownPos.width, zIndex: 99999, background: "white", border: "1px solid #ddd", borderRadius: "4px", boxShadow: "0 4px 12px rgba(0,0,0,.15)", maxHeight: "220px", overflowY: "auto" }}>
+                          {customerResults.map((c) => (
+                            <div key={c.id} onClick={() => selectCustomer(c)} style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid #f1f1f1", fontSize: "14px" }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = "#f6f6f7"}
+                              onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
+                              <strong>{c.name || "(no name)"}</strong>
+                              {c.company && <span style={{ color: "#6d7175" }}> — {c.company}</span>}
+                              <div style={{ fontSize: "12px", color: "#6d7175" }}>{c.email}</div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        ref={linkedInputRef}
+                        type="search"
+                        value={companySearch}
+                        onChange={(e) => handleCompanySearch(e.target.value)}
+                        placeholder="Search by company name..."
+                        style={{ padding: "6px 12px", border: "1px solid #8c9196", borderRadius: "4px", fontSize: "14px", width: "100%", boxSizing: "border-box" }}
+                      />
+                      {companyResults.length > 0 && (
+                        <div style={{ position: "fixed", top: linkedDropdownPos.top, left: linkedDropdownPos.left, width: linkedDropdownPos.width, zIndex: 99999, background: "white", border: "1px solid #ddd", borderRadius: "4px", boxShadow: "0 4px 12px rgba(0,0,0,.15)", maxHeight: "220px", overflowY: "auto" }}>
+                          {companyResults.map((c) => (
+                            <div key={c.id} onClick={() => selectCompany(c)} style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid #f1f1f1", fontSize: "14px" }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = "#f6f6f7"}
+                              onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
+                              <strong>{c.name}</strong>
+                              {c.locationName && <span style={{ color: "#6d7175" }}> — {c.locationName}</span>}
+                              {c.contactEmail && <div style={{ fontSize: "12px", color: "#6d7175" }}>Contact: {c.contactName || c.contactEmail}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

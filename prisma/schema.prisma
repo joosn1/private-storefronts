@@ -41,7 +41,10 @@ model Storefront {
   password            String?
   requireLogin        Boolean  @default(false)
   isActive            Boolean  @default(true)
-  shopifyCustomerId   String?
+  shopifyCustomerId        String?
+  shopifyCompanyId         String?
+  shopifyCompanyLocationId String?
+  shopifyCompanyContactId  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
