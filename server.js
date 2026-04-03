@@ -323,6 +323,7 @@ function buildCartScript(accentColor) {
 async function handleProxyCheckout(req, res) {
   try {
     const db = await getPrisma();
+    const { getSessionCookie, customerCookieName } = await getSessionUtils();
     const { slug } = req.params;
 
     const storefront = await db.storefront.findUnique({ where: { slug } });
@@ -349,44 +350,95 @@ async function handleProxyCheckout(req, res) {
       return parseInt(parts[parts.length - 1], 10) || null;
     }
 
+    // Look up custom prices and base prices from DB — never trust client prices
+    const variantGids = lines.map((l) => l.variantId).filter(Boolean);
+    const storefrontProducts = await db.storefrontProduct.findMany({
+      where: { storefrontId: storefront.id, shopifyVariantId: { in: variantGids } },
+    });
+    const priceMap = {};
+    for (const sp of storefrontProducts) {
+      priceMap[sp.shopifyVariantId] = {
+        base: Number(sp.basePrice || "0"),
+        custom: sp.customPrice != null ? Number(sp.customPrice.toString()) : null,
+      };
+    }
+
+    // Get logged-in customer email (if storefront requires login)
+    let customerEmail = null;
+    if (storefront.requireLogin) {
+      const cookieHeader = req.headers.cookie || "";
+      const fakeReq = { headers: { get: (h) => h === "cookie" ? cookieHeader : null } };
+      const custId = getSessionCookie(fakeReq, customerCookieName(slug));
+      if (custId) {
+        const customer = await db.storefrontCustomer.findFirst({
+          where: { id: custId, storefrontId: storefront.id, isActive: true },
+        });
+        if (customer) customerEmail = customer.email;
+      }
+    }
+
+    // Build line items — use applied_discount for custom pricing
     const lineItems = lines
-      .map((l) => ({
-        variant_id: numericId(l.variantId),
-        quantity: Math.max(1, parseInt(l.qty, 10) || 1),
-        price: parseFloat(l.price).toFixed(2),
-      }))
-      .filter((li) => li.variant_id);
+      .map((l) => {
+        const id = numericId(l.variantId);
+        if (!id) return null;
+        const qty = Math.max(1, parseInt(l.qty, 10) || 1);
+        const prices = priceMap[l.variantId];
+        const li = { variant_id: id, quantity: qty };
+
+        if (prices && prices.custom !== null) {
+          const discount = Math.round((prices.base - prices.custom) * 100) / 100;
+          if (discount > 0) {
+            li.applied_discount = {
+              value_type: "fixed_amount",
+              value: discount.toFixed(2),
+              title: "Wholesale Price",
+            };
+          }
+        }
+        return li;
+      })
+      .filter(Boolean);
 
     if (!lineItems.length) {
       return res.status(400).json({ error: "No valid line items" });
     }
 
-    const apiVersion = "2025-10";
+    // Build draft order
+    const draftOrderInput = {
+      line_items: lineItems,
+      note: `Private Storefront: ${storefront.name} — ${storefront.companyName}`,
+      tags: `private-storefront,${slug}`,
+    };
+
+    // Attach logged-in customer email
+    if (customerEmail) draftOrderInput.email = customerEmail;
+
+    // Attach linked Shopify customer if configured on this storefront
+    if (storefront.shopifyCustomerId) {
+      const custNumId = numericId(storefront.shopifyCustomerId);
+      if (custNumId) draftOrderInput.customer = { id: custNumId };
+    }
+
     const draftRes = await fetch(
-      `https://${storefront.shopDomain}/admin/api/${apiVersion}/draft_orders.json`,
+      `https://${storefront.shopDomain}/admin/api/2025-10/draft_orders.json`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Shopify-Access-Token": session.accessToken,
         },
-        body: JSON.stringify({ draft_order: { line_items: lineItems } }),
+        body: JSON.stringify({ draft_order: draftOrderInput }),
       }
     );
 
-    if (!draftRes.ok) {
-      const errBody = await draftRes.json().catch(() => ({}));
-      console.error("Draft order creation failed:", errBody);
+    const data = await draftRes.json();
+    if (!draftRes.ok || !data?.draft_order?.invoice_url) {
+      console.error("Draft order creation failed:", JSON.stringify(data));
       return res.status(500).json({ error: "Could not create order. Please try again." });
     }
 
-    const data = await draftRes.json();
-    const invoiceUrl = data?.draft_order?.invoice_url;
-    if (!invoiceUrl) {
-      return res.status(500).json({ error: "No invoice URL returned from Shopify." });
-    }
-
-    res.json({ url: invoiceUrl });
+    res.json({ url: data.draft_order.invoice_url });
   } catch (err) {
     console.error("Checkout error:", err);
     res.status(500).json({ error: "Server error" });

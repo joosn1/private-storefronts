@@ -38,9 +38,10 @@ model Storefront {
   companyName  String
   logoUrl      String?
   primaryColor String   @default("#000000")
-  password     String?
-  requireLogin Boolean  @default(false)
-  isActive     Boolean  @default(true)
+  password            String?
+  requireLogin        Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  shopifyCustomerId   String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

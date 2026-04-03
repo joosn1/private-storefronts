@@ -59,6 +59,7 @@ export const action = async ({ request, params }) => {
   const {
     name, companyName, slug, primaryColor, logoUrl, isActive,
     passwordEnabled, password, requireLogin, selectedVariants,
+    shopifyCustomerId,
   } = body;
 
   if (!name?.trim()) return { error: "Storefront name is required" };
@@ -105,6 +106,7 @@ export const action = async ({ request, params }) => {
       password: hashedPassword,
       requireLogin: !!requireLogin,
       isActive: isActive !== false,
+      shopifyCustomerId: shopifyCustomerId || null,
     },
   });
 
@@ -199,6 +201,7 @@ export default function EditStorefront() {
   const navigate = useNavigate();
   const saveFetcher = useFetcher();
   const productsFetcher = useFetcher();
+  const customerFetcher = useFetcher();
 
   const [step, setStep] = useState(0);
   const [stepError, setStepError] = useState("");
@@ -212,6 +215,8 @@ export default function EditStorefront() {
     passwordEnabled: !!storefront.password,
     password: "",
     requireLogin: storefront.requireLogin,
+    shopifyCustomerId: storefront.shopifyCustomerId || null,
+    linkedCustomer: storefront.shopifyCustomerId ? { id: storefront.shopifyCustomerId, name: storefront.linkedCustomerName || "", email: storefront.linkedCustomerEmail || "", company: "" } : null,
     selectedVariants: storefront.products.map((p) => ({
       productId: p.shopifyProductId,
       variantId: p.shopifyVariantId,
@@ -231,6 +236,39 @@ export default function EditStorefront() {
   const searchTimeout = useRef(null);
 
   const isSaving = saveFetcher.state !== "idle";
+
+  // ── Customer search ───────────────────────────────────────────────────────
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerResults, setCustomerResults] = useState([]);
+  const customerSearchTimeout = useRef(null);
+
+  useEffect(() => {
+    if (customerFetcher.data?.customers) {
+      setCustomerResults(customerFetcher.data.customers);
+    }
+  }, [customerFetcher.data]);
+
+  function handleCustomerSearch(value) {
+    setCustomerSearch(value);
+    setCustomerResults([]);
+    clearTimeout(customerSearchTimeout.current);
+    if (!value.trim()) return;
+    customerSearchTimeout.current = setTimeout(() => {
+      customerFetcher.load(`/app/storefronts/customer-search?q=${encodeURIComponent(value)}`);
+    }, 300);
+  }
+
+  function selectCustomer(c) {
+    setForm((prev) => ({ ...prev, shopifyCustomerId: c.id, linkedCustomer: c }));
+    setCustomerSearch("");
+    setCustomerResults([]);
+  }
+
+  function clearCustomer() {
+    setForm((prev) => ({ ...prev, shopifyCustomerId: null, linkedCustomer: null }));
+    setCustomerSearch("");
+    setCustomerResults([]);
+  }
 
   useEffect(() => {
     if (productsFetcher.data && productsFetcher.state === "idle") {
@@ -470,6 +508,48 @@ export default function EditStorefront() {
               checked={form.isActive}
               onChange={(e) => updateForm("isActive", e.target.checked)}
             />
+
+            {/* Linked Shopify Customer */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <label style={labelStyle}>Linked Customer (optional)</label>
+              <p style={{ margin: "0 0 6px", fontSize: "13px", color: "#6d7175" }}>
+                Attach a Shopify customer to this storefront so draft orders are automatically associated with them.
+              </p>
+              {form.linkedCustomer ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", background: "#f1f8f5", border: "1px solid #b5e0ca", borderRadius: "6px" }}>
+                  <span style={{ fontSize: "14px", color: "#202223", flex: 1 }}>
+                    ✓ <strong>{form.linkedCustomer.name || form.linkedCustomer.email}</strong>
+                    {form.linkedCustomer.company && ` — ${form.linkedCustomer.company}`}
+                    <span style={{ color: "#6d7175", marginLeft: "6px" }}>{form.linkedCustomer.email}</span>
+                  </span>
+                  <button onClick={clearCustomer} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: "13px" }}>Remove</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="search"
+                    value={customerSearch}
+                    onChange={(e) => handleCustomerSearch(e.target.value)}
+                    placeholder="Search by name or email..."
+                    style={{ padding: "6px 12px", border: "1px solid #8c9196", borderRadius: "4px", fontSize: "14px", width: "100%", boxSizing: "border-box" }}
+                  />
+                  {customerResults.length > 0 && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, background: "white", border: "1px solid #ddd", borderRadius: "4px", boxShadow: "0 4px 12px rgba(0,0,0,.1)", maxHeight: "220px", overflowY: "auto" }}>
+                      {customerResults.map((c) => (
+                        <div key={c.id} onClick={() => selectCustomer(c)}
+                          style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid #f1f1f1", fontSize: "14px" }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#f6f6f7"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
+                          <strong>{c.name || "(no name)"}</strong>
+                          {c.company && <span style={{ color: "#6d7175" }}> — {c.company}</span>}
+                          <div style={{ fontSize: "12px", color: "#6d7175" }}>{c.email}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </s-stack>
         </s-section>
       )}
