@@ -317,9 +317,11 @@ async function handleProxyMain(req, res) {
           variants: [],
         });
       }
-      const displayPrice = sp.customPrice !== null
-        ? sp.customPrice.toString()
-        : (sp.basePrice || "0");
+      const customPriceNum = sp.customPrice != null ? Number(sp.customPrice.toString()) : null;
+      const basePriceNum = Number(sp.basePrice || "0");
+      const displayPrice = (customPriceNum !== null && !isNaN(customPriceNum))
+        ? customPriceNum.toFixed(2)
+        : basePriceNum.toFixed(2);
       productMap.get(sp.shopifyProductId).variants.push({
         id: sp.shopifyVariantId,
         title: sp.variantTitle || "Default",

@@ -71,7 +71,7 @@ export const action = async ({ request }) => {
         storefrontId: storefront.id,
         shopifyProductId: v.productId,
         shopifyVariantId: v.variantId,
-        customPrice: v.customPrice ? parseFloat(v.customPrice) : null,
+        customPrice: (v.customPrice !== "" && v.customPrice != null && !isNaN(Number(v.customPrice))) ? String(v.customPrice) : null,
         productTitle: v.productTitle || "",
         productImage: v.productImage || null,
         variantTitle: v.variantTitle || "",
