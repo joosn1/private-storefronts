@@ -406,7 +406,6 @@ app.use("/assets", express.static("build/client/assets", { immutable: true, maxA
 app.use(express.static("build/client", { maxAge: "1h" }));
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
 
 // Proxy routes — handled BEFORE React Router so no hydration issues
 app.all("/storefronts/:slug/auth", handleProxyAuth);
