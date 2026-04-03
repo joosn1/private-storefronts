@@ -345,12 +345,7 @@ async function handleProxyCheckout(req, res) {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
-    function numericId(gid) {
-      const parts = String(gid || "").split("/");
-      return parseInt(parts[parts.length - 1], 10) || null;
-    }
-
-    // Look up custom prices and base prices from DB — never trust client prices
+    // Look up custom prices from DB — never trust client-submitted prices
     const variantGids = lines.map((l) => l.variantId).filter(Boolean);
     const storefrontProducts = await db.storefrontProduct.findMany({
       where: { storefrontId: storefront.id, shopifyVariantId: { in: variantGids } },
@@ -358,7 +353,6 @@ async function handleProxyCheckout(req, res) {
     const priceMap = {};
     for (const sp of storefrontProducts) {
       priceMap[sp.shopifyVariantId] = {
-        base: Number(sp.basePrice || "0"),
         custom: sp.customPrice != null ? Number(sp.customPrice.toString()) : null,
       };
     }
@@ -377,82 +371,91 @@ async function handleProxyCheckout(req, res) {
       }
     }
 
-    // Build line items — use applied_discount for custom pricing
+    // Build line items using GraphQL format.
+    // originalUnitPrice sets the actual price on the line item (not a discount),
+    // which is the only correct way to apply custom pricing via variant-based line items.
     const lineItems = lines
+      .filter((l) => l.variantId)
       .map((l) => {
-        const id = numericId(l.variantId);
-        if (!id) return null;
         const qty = Math.max(1, parseInt(l.qty, 10) || 1);
+        const item = { variantId: l.variantId, quantity: qty };
         const prices = priceMap[l.variantId];
-        const li = { variant_id: id, quantity: qty };
-
         if (prices && prices.custom !== null) {
-          const discount = Math.round((prices.base - prices.custom) * 100) / 100;
-          if (discount > 0) {
-            li.applied_discount = {
-              value_type: "fixed_amount",
-              value: discount.toFixed(2),
-              title: "Wholesale Price",
-            };
-          }
+          item.originalUnitPrice = prices.custom.toFixed(2);
         }
-        return li;
-      })
-      .filter(Boolean);
+        return item;
+      });
 
     if (!lineItems.length) {
       return res.status(400).json({ error: "No valid line items" });
     }
 
-    // Build draft order
-    const draftOrderInput = {
-      line_items: lineItems,
+    // Build GraphQL draft order input
+    const draftInput = {
+      lineItems,
       note: `Private Storefront: ${storefront.name} — ${storefront.companyName}`,
-      tags: `private-storefront,${slug}`,
+      tags: ["private-storefront", slug],
     };
 
-    // Attach logged-in customer email
-    if (customerEmail) draftOrderInput.email = customerEmail;
+    if (customerEmail) draftInput.email = customerEmail;
 
-    // Attach linked Shopify company or customer if configured on this storefront
+    // Attach linked company (preferred) or customer to the draft order
     if (storefront.shopifyCompanyId && storefront.shopifyCompanyLocationId) {
-      const companyNumId = numericId(storefront.shopifyCompanyId);
-      const locationNumId = numericId(storefront.shopifyCompanyLocationId);
-      if (companyNumId && locationNumId) {
-        const purchasingCompany = {
-          company_id: companyNumId,
-          company_location_id: locationNumId,
-        };
-        if (storefront.shopifyCompanyContactId) {
-          const contactNumId = numericId(storefront.shopifyCompanyContactId);
-          if (contactNumId) purchasingCompany.company_contact_id = contactNumId;
-        }
-        draftOrderInput.purchasing_entity = { purchasing_company: purchasingCompany };
+      const purchasingCompany = {
+        companyId: storefront.shopifyCompanyId,
+        companyLocationId: storefront.shopifyCompanyLocationId,
+      };
+      if (storefront.shopifyCompanyContactId) {
+        purchasingCompany.companyContactId = storefront.shopifyCompanyContactId;
       }
+      draftInput.purchasingEntity = { purchasingCompany };
     } else if (storefront.shopifyCustomerId) {
-      const custNumId = numericId(storefront.shopifyCustomerId);
-      if (custNumId) draftOrderInput.customer = { id: custNumId };
+      draftInput.purchasingEntity = { customerId: storefront.shopifyCustomerId };
     }
 
-    const draftRes = await fetch(
-      `https://${storefront.shopDomain}/admin/api/2025-10/draft_orders.json`,
+    // Create draft order via GraphQL Admin API so we can set originalUnitPrice per line item
+    const gqlRes = await fetch(
+      `https://${storefront.shopDomain}/admin/api/2025-10/graphql.json`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Shopify-Access-Token": session.accessToken,
         },
-        body: JSON.stringify({ draft_order: draftOrderInput }),
+        body: JSON.stringify({
+          query: `
+            mutation CreateDraftOrder($input: DraftOrderInput!) {
+              draftOrderCreate(input: $input) {
+                draftOrder {
+                  id
+                  invoiceUrl
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `,
+          variables: { input: draftInput },
+        }),
       }
     );
 
-    const data = await draftRes.json();
-    if (!draftRes.ok || !data?.draft_order?.invoice_url) {
-      console.error("Draft order creation failed:", JSON.stringify(data));
+    const gqlData = await gqlRes.json();
+    const userErrors = gqlData?.data?.draftOrderCreate?.userErrors;
+    if (userErrors?.length) {
+      console.error("Draft order userErrors:", JSON.stringify(userErrors));
       return res.status(500).json({ error: "Could not create order. Please try again." });
     }
 
-    res.json({ url: data.draft_order.invoice_url });
+    const invoiceUrl = gqlData?.data?.draftOrderCreate?.draftOrder?.invoiceUrl;
+    if (!invoiceUrl) {
+      console.error("Draft order creation failed:", JSON.stringify(gqlData));
+      return res.status(500).json({ error: "Could not create order. Please try again." });
+    }
+
+    res.json({ url: invoiceUrl });
   } catch (err) {
     console.error("Checkout error:", err);
     res.status(500).json({ error: "Server error" });
