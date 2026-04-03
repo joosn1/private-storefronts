@@ -627,12 +627,14 @@ app.use("/assets", express.static("build/client/assets", { immutable: true, maxA
 app.use(express.static("build/client", { maxAge: "1h" }));
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// express.json() is NOT applied globally — it would consume the request body stream
+// before React Router's action can call request.json(), causing silent save failures.
+// Apply it only to the specific Express routes that read req.body as JSON (e.g. checkout).
 
 // Proxy routes — handled BEFORE React Router so no hydration issues
 app.all("/storefronts/:slug/auth", handleProxyAuth);
 app.all("/storefronts/:slug/login", handleProxyLogin);
-app.post("/storefronts/:slug/checkout", handleProxyCheckout);
+app.post("/storefronts/:slug/checkout", express.json(), handleProxyCheckout);
 app.get("/storefronts/:slug", handleProxyMain);
 
 // Everything else goes to React Router
