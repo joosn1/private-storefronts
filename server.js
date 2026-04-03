@@ -60,7 +60,7 @@ function fmtPrice(amount, currency = "USD") {
 
 // ─── Storefront HTML builder ──────────────────────────────────────────────────
 
-function buildStorefrontHtml(storefront, products) {
+function buildStorefrontHtml(storefront, products, shop) {
   const accent = storefront.primaryColor || "#000000";
   const contrast = getContrastColor(accent);
 
@@ -89,6 +89,9 @@ function buildStorefrontHtml(storefront, products) {
   }).join("\n");
 
   const cartScript = buildCartScript(accent);
+
+  const safeSlug = esc(storefront.slug);
+  const safeShop = esc(shop || "");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -141,10 +144,22 @@ function buildStorefrontHtml(storefront, products) {
     </div>
   </div>
   <script>
+    var _psfSlug='${safeSlug}',_psfShop='${safeShop}';
     (function(){
       document.getElementById('cart-toggle').addEventListener('click',function(){var p=document.getElementById('cart-panel');p.style.display=p.style.display==='none'?'block':'none';});
       document.getElementById('cart-close').addEventListener('click',function(){document.getElementById('cart-panel').style.display='none';});
-      document.getElementById('checkout-btn').addEventListener('click',function(){window.location.href='/checkout';});
+      document.getElementById('checkout-btn').addEventListener('click',async function(){
+        var btn=this;
+        btn.textContent='Processing...';btn.disabled=true;
+        try{
+          var cartLines=JSON.parse(localStorage.getItem('psf_cart_lines')||'[]');
+          if(!cartLines.length){btn.textContent='Proceed to Checkout';btn.disabled=false;return;}
+          var shopParam=_psfShop?'?shop='+encodeURIComponent(_psfShop):'';
+          var r=await fetch('/apps/storefronts/'+_psfSlug+'/checkout'+shopParam,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({lines:cartLines.map(function(l){return{variantId:l.id,qty:l.qty,price:l.price,title:l.t};})})});
+          var d=await r.json().catch(function(){return{};});
+          if(d.url){window.location.href=d.url;}else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
+        }catch(e){alert('Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
+      });
     })();
     ${cartScript}
   </script>
@@ -224,16 +239,50 @@ function buildLoginHtml(storefront, proxyBase, error) {
 
 function buildCartScript(accentColor) {
   return `(function(){
-  // Extract numeric Shopify ID from GID (e.g. "gid://shopify/ProductVariant/123" -> 123)
   function numId(gid){var p=String(gid||'').split('/');return parseInt(p[p.length-1],10)||null;}
   let lines=JSON.parse(localStorage.getItem('psf_cart_lines')||'[]');
+  var btnStyle='width:28px;height:28px;border:1px solid #ddd;border-radius:4px;background:white;cursor:pointer;font-size:1rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;';
+  function fmtCur(amount,cur){return new Intl.NumberFormat('en-US',{style:'currency',currency:cur||'USD'}).format(amount);}
   function updateUI(){
     var tot=lines.reduce(function(s,l){return s+l.price*l.qty;},0),cnt=lines.reduce(function(s,l){return s+l.qty;},0);
     var ce=document.getElementById('cart-count'),ie=document.getElementById('cart-items'),fe=document.getElementById('cart-footer'),te=document.getElementById('cart-total');
     if(ce)ce.textContent=cnt;
-    if(ie){if(!lines.length){ie.innerHTML='<p style="color:#666">Your cart is empty.</p>';}else{ie.innerHTML=lines.map(function(l){return'<div style="display:flex;justify-content:space-between;align-items:center;padding:.75rem 0;border-bottom:1px solid #eee"><div><div style="font-weight:600;font-size:.9rem">'+l.t+'</div>'+(l.vt?'<div style="font-size:.8rem;color:#666">'+l.vt+'</div>':'')+'<div style="font-size:.8rem;color:#666">Qty: '+l.qty+'</div></div><div style="font-weight:600">'+new Intl.NumberFormat('en-US',{style:'currency',currency:l.cur||'USD'}).format(l.price*l.qty)+'</div></div>';}).join('');}}
+    if(ie){
+      if(!lines.length){ie.innerHTML='<p style="color:#666">Your cart is empty.</p>';}
+      else{
+        ie.innerHTML=lines.map(function(l,i){
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:.75rem 0;border-bottom:1px solid #eee">'
+            +'<div>'
+            +'<div style="font-weight:600;font-size:.9rem">'+l.t+'</div>'
+            +(l.vt?'<div style="font-size:.8rem;color:#666">'+l.vt+'</div>':'')
+            +'<div style="display:flex;align-items:center;gap:.5rem;margin-top:.375rem">'
+            +'<button class="psf-qty-btn" data-idx="'+i+'" data-delta="-1" style="'+btnStyle+'">−</button>'
+            +'<span style="min-width:1.75rem;text-align:center;font-weight:600;font-size:.9rem">'+l.qty+'</span>'
+            +'<button class="psf-qty-btn" data-idx="'+i+'" data-delta="1" style="'+btnStyle+'">+</button>'
+            +'</div>'
+            +'</div>'
+            +'<div style="font-weight:600">'+fmtCur(l.price*l.qty,l.cur)+'</div>'
+            +'</div>';
+        }).join('');
+        document.querySelectorAll('.psf-qty-btn').forEach(function(btn){
+          btn.addEventListener('click',function(){
+            var idx=parseInt(this.dataset.idx,10),delta=parseInt(this.dataset.delta,10);
+            if(isNaN(idx)||!lines[idx])return;
+            var vid=numId(lines[idx].id);
+            lines[idx].qty+=delta;
+            if(lines[idx].qty<=0){
+              lines.splice(idx,1);
+              if(vid)fetch('/cart/change.js',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({id:vid,quantity:0})}).catch(function(){});
+            }else{
+              if(vid)fetch('/cart/change.js',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({id:vid,quantity:lines[idx].qty})}).catch(function(){});
+            }
+            updateUI();
+          });
+        });
+      }
+    }
     if(fe)fe.style.display=lines.length?'block':'none';
-    if(te)te.textContent=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(tot);
+    if(te)te.textContent=fmtCur(tot,'USD');
     localStorage.setItem('psf_cart_lines',JSON.stringify(lines));
   }
   async function addToCart(vid,vt,title,price,cur){
@@ -270,6 +319,79 @@ function buildCartScript(accentColor) {
 }
 
 // ─── Route handlers ───────────────────────────────────────────────────────────
+
+async function handleProxyCheckout(req, res) {
+  try {
+    const db = await getPrisma();
+    const { slug } = req.params;
+
+    const storefront = await db.storefront.findUnique({ where: { slug } });
+    if (!storefront || !storefront.isActive) {
+      return res.status(404).json({ error: "Storefront not found" });
+    }
+
+    // Find an offline access token for this shop
+    const session = await db.session.findFirst({
+      where: { shop: storefront.shopDomain, isOnline: false },
+      orderBy: { id: "desc" },
+    });
+    if (!session?.accessToken) {
+      return res.status(500).json({ error: "Shop session not found. Please reinstall the app." });
+    }
+
+    const { lines } = req.body || {};
+    if (!Array.isArray(lines) || !lines.length) {
+      return res.status(400).json({ error: "Cart is empty" });
+    }
+
+    function numericId(gid) {
+      const parts = String(gid || "").split("/");
+      return parseInt(parts[parts.length - 1], 10) || null;
+    }
+
+    const lineItems = lines
+      .map((l) => ({
+        variant_id: numericId(l.variantId),
+        quantity: Math.max(1, parseInt(l.qty, 10) || 1),
+        price: parseFloat(l.price).toFixed(2),
+      }))
+      .filter((li) => li.variant_id);
+
+    if (!lineItems.length) {
+      return res.status(400).json({ error: "No valid line items" });
+    }
+
+    const apiVersion = "2025-10";
+    const draftRes = await fetch(
+      `https://${storefront.shopDomain}/admin/api/${apiVersion}/draft_orders.json`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": session.accessToken,
+        },
+        body: JSON.stringify({ draft_order: { line_items: lineItems } }),
+      }
+    );
+
+    if (!draftRes.ok) {
+      const errBody = await draftRes.json().catch(() => ({}));
+      console.error("Draft order creation failed:", errBody);
+      return res.status(500).json({ error: "Could not create order. Please try again." });
+    }
+
+    const data = await draftRes.json();
+    const invoiceUrl = data?.draft_order?.invoice_url;
+    if (!invoiceUrl) {
+      return res.status(500).json({ error: "No invoice URL returned from Shopify." });
+    }
+
+    res.json({ url: invoiceUrl });
+  } catch (err) {
+    console.error("Checkout error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+}
 
 async function handleProxyMain(req, res) {
   try {
@@ -332,7 +454,7 @@ async function handleProxyMain(req, res) {
     }
     const products = [...productMap.values()];
 
-    const html = buildStorefrontHtml(storefront, products);
+    const html = buildStorefrontHtml(storefront, products, shop);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
   } catch (err) {
@@ -439,10 +561,12 @@ app.use("/assets", express.static("build/client/assets", { immutable: true, maxA
 app.use(express.static("build/client", { maxAge: "1h" }));
 
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 // Proxy routes — handled BEFORE React Router so no hydration issues
 app.all("/storefronts/:slug/auth", handleProxyAuth);
 app.all("/storefronts/:slug/login", handleProxyLogin);
+app.post("/storefronts/:slug/checkout", handleProxyCheckout);
 app.get("/storefronts/:slug", handleProxyMain);
 
 // Everything else goes to React Router
