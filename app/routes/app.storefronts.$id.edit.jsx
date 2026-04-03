@@ -241,10 +241,17 @@ export default function EditStorefront() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState([]);
   const customerSearchTimeout = useRef(null);
+  const customerInputRef = useRef(null);
+  const [customerDropdownPos, setCustomerDropdownPos] = useState({ top: 0, left: 0, width: 0 });
 
   useEffect(() => {
     if (customerFetcher.data?.customers) {
       setCustomerResults(customerFetcher.data.customers);
+      // Re-measure input position when results arrive
+      if (customerInputRef.current) {
+        const rect = customerInputRef.current.getBoundingClientRect();
+        setCustomerDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
+      }
     }
   }, [customerFetcher.data]);
 
@@ -253,6 +260,11 @@ export default function EditStorefront() {
     setCustomerResults([]);
     clearTimeout(customerSearchTimeout.current);
     if (!value.trim()) return;
+    // Capture input position for fixed-position dropdown
+    if (customerInputRef.current) {
+      const rect = customerInputRef.current.getBoundingClientRect();
+      setCustomerDropdownPos({ top: rect.bottom, left: rect.left, width: rect.width });
+    }
     customerSearchTimeout.current = setTimeout(() => {
       customerFetcher.load(`/app/storefronts/customer-search?q=${encodeURIComponent(value)}`);
     }, 300);
@@ -525,8 +537,9 @@ export default function EditStorefront() {
                   <button onClick={clearCustomer} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: "13px" }}>Remove</button>
                 </div>
               ) : (
-                <div style={{ position: "relative" }}>
+                <div>
                   <input
+                    ref={customerInputRef}
                     type="search"
                     value={customerSearch}
                     onChange={(e) => handleCustomerSearch(e.target.value)}
@@ -534,7 +547,7 @@ export default function EditStorefront() {
                     style={{ padding: "6px 12px", border: "1px solid #8c9196", borderRadius: "4px", fontSize: "14px", width: "100%", boxSizing: "border-box" }}
                   />
                   {customerResults.length > 0 && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, background: "white", border: "1px solid #ddd", borderRadius: "4px", boxShadow: "0 4px 12px rgba(0,0,0,.1)", maxHeight: "220px", overflowY: "auto" }}>
+                    <div style={{ position: "fixed", top: customerDropdownPos.top, left: customerDropdownPos.left, width: customerDropdownPos.width, zIndex: 99999, background: "white", border: "1px solid #ddd", borderRadius: "4px", boxShadow: "0 4px 12px rgba(0,0,0,.15)", maxHeight: "220px", overflowY: "auto" }}>
                       {customerResults.map((c) => (
                         <div key={c.id} onClick={() => selectCustomer(c)}
                           style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid #f1f1f1", fontSize: "14px" }}
