@@ -128,7 +128,7 @@ export const action = async ({ request, params }) => {
     });
   }
 
-  return redirect("/app?updated=1");
+  return { success: true };
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -253,6 +253,9 @@ export default function EditStorefront() {
   }, [step]);
 
   useEffect(() => {
+    if (saveFetcher.data?.success) {
+      navigate("/app");
+    }
     if (saveFetcher.data?.error) {
       shopify.toast.show(saveFetcher.data.error, { isError: true });
     }
@@ -446,17 +449,15 @@ export default function EditStorefront() {
                 onChange={(e) => updateForm("primaryColor", e.target.value)}
                 style={{ flex: 1 }}
               />
-              <div
-                style={{
-                  backgroundColor: form.primaryColor,
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "4px",
-                  border: "1px solid #ddd",
-                  flexShrink: 0,
-                  alignSelf: "flex-end",
-                }}
-              />
+              <div style={{ display: "flex", flexDirection: "column", alignSelf: "flex-end" }}>
+                <label style={labelStyle}>Preview</label>
+                <input
+                  type="color"
+                  value={/^#[0-9a-fA-F]{6}$/.test(form.primaryColor) ? form.primaryColor : "#000000"}
+                  onChange={(e) => updateForm("primaryColor", e.target.value)}
+                  style={{ width: "40px", height: "38px", border: "1px solid #8c9196", borderRadius: "4px", padding: "2px", cursor: "pointer", background: "white" }}
+                />
+              </div>
             </s-stack>
             <Field
               label="Logo URL"
