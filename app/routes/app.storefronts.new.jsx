@@ -72,6 +72,11 @@ export const action = async ({ request }) => {
         shopifyProductId: v.productId,
         shopifyVariantId: v.variantId,
         customPrice: v.customPrice ? parseFloat(v.customPrice) : null,
+        productTitle: v.productTitle || "",
+        productImage: v.productImage || null,
+        variantTitle: v.variantTitle || "",
+        basePrice: v.basePrice || "0",
+        availableForSale: v.availableForSale !== false,
         sortOrder: i,
         isVisible: true,
       })),
@@ -266,7 +271,16 @@ export default function NewStorefront() {
         ...prev,
         selectedVariants: [
           ...prev.selectedVariants,
-          { productId: product.id, variantId: variant.id, customPrice: "" },
+          {
+            productId: product.id,
+            variantId: variant.id,
+            customPrice: "",
+            productTitle: product.title,
+            productImage: product.image || null,
+            variantTitle: variant.title,
+            basePrice: variant.price,
+            availableForSale: variant.availableForSale,
+          },
         ],
       };
     });
@@ -286,7 +300,16 @@ export default function NewStorefront() {
     filteredProducts.forEach((product) => {
       product.variants.forEach((variant) => {
         if (!isVariantSelected(variant.id)) {
-          toAdd.push({ productId: product.id, variantId: variant.id, customPrice: "" });
+          toAdd.push({
+            productId: product.id,
+            variantId: variant.id,
+            customPrice: "",
+            productTitle: product.title,
+            productImage: product.image || null,
+            variantTitle: variant.title,
+            basePrice: variant.price,
+            availableForSale: variant.availableForSale,
+          });
         }
       });
     });

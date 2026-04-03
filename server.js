@@ -267,44 +267,36 @@ async function handleProxyMain(req, res) {
       if (!customerId) return res.redirect(302, `${proxyBase}/login`);
     }
 
-    // Load products
-    const { fetchProductsByIds } = await import("./app/utils/storefront-api.server.js");
+    // Load products from DB (metadata cached at storefront configuration time — no API call needed)
     const storefrontProducts = await db.storefrontProduct.findMany({
       where: { storefrontId: storefront.id, isVisible: true },
       orderBy: { sortOrder: "asc" },
     });
 
-    const uniqueProductIds = [...new Set(storefrontProducts.map((p) => p.shopifyProductId))];
-    let shopifyProducts = [];
-    if (uniqueProductIds.length > 0) {
-      shopifyProducts = await fetchProductsByIds(storefront.shopDomain, uniqueProductIds);
-    }
-
-    const customPriceMap = {};
+    // Group variants by product, preserving sort order
+    const productMap = new Map();
     for (const sp of storefrontProducts) {
-      if (sp.customPrice !== null) customPriceMap[sp.shopifyVariantId] = sp.customPrice.toString();
+      if (!productMap.has(sp.shopifyProductId)) {
+        productMap.set(sp.shopifyProductId, {
+          id: sp.shopifyProductId,
+          title: sp.productTitle || "Product",
+          image: sp.productImage || null,
+          imageAlt: sp.productTitle || "Product",
+          variants: [],
+        });
+      }
+      const displayPrice = sp.customPrice !== null
+        ? sp.customPrice.toString()
+        : (sp.basePrice || "0");
+      productMap.get(sp.shopifyProductId).variants.push({
+        id: sp.shopifyVariantId,
+        title: sp.variantTitle || "Default",
+        price: displayPrice,
+        currencyCode: "USD",
+        availableForSale: sp.availableForSale,
+      });
     }
-
-    const allowedVariantIds = new Set(storefrontProducts.map((p) => p.shopifyVariantId));
-    const products = shopifyProducts
-      .filter((p) => p && p.id)
-      .map((product) => ({
-        id: product.id,
-        title: product.title,
-        image: product.featuredImage?.url || null,
-        imageAlt: product.featuredImage?.altText || product.title,
-        variants: (product.variants?.edges || [])
-          .map((e) => e.node)
-          .filter((v) => allowedVariantIds.has(v.id))
-          .map((v) => ({
-            id: v.id,
-            title: v.title,
-            price: customPriceMap[v.id] ?? v.price?.amount ?? "0",
-            currencyCode: v.price?.currencyCode ?? "USD",
-            availableForSale: v.availableForSale,
-          })),
-      }))
-      .filter((p) => p.variants.length > 0);
+    const products = [...productMap.values()];
 
     const token = process.env.SHOPIFY_STOREFRONT_TOKEN || "";
     const html = buildStorefrontHtml(storefront, products, token, storefront.shopDomain);

@@ -55,6 +55,11 @@ model StorefrontProduct {
   shopifyProductId String
   shopifyVariantId String
   customPrice      Decimal?   @db.Decimal(10, 2)
+  productTitle     String     @default("")
+  productImage     String?
+  variantTitle     String     @default("")
+  basePrice        String     @default("0")
+  availableForSale Boolean    @default(true)
   isVisible        Boolean    @default(true)
   sortOrder        Int        @default(0)
   createdAt        DateTime   @default(now())
