@@ -76,6 +76,47 @@ export async function fetchProductsByIds(shopDomain, productIds) {
 }
 
 /**
+ * Create a Shopify cart with line items via the Storefront API.
+ * lines: [{ merchandiseId, quantity }]
+ * Returns { id, checkoutUrl } or null on failure.
+ */
+export async function createCartWithLines(shopDomain, lines) {
+  try {
+    const client = getClient(shopDomain);
+    const { data, errors } = await client.request(
+      `
+      mutation cartCreate($input: CartInput!) {
+        cartCreate(input: $input) {
+          cart {
+            id
+            checkoutUrl
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+      { variables: { input: { lines } } },
+    );
+
+    if (errors || data?.cartCreate?.userErrors?.length > 0) {
+      console.error(
+        "Cart create with lines errors:",
+        errors || data?.cartCreate?.userErrors,
+      );
+      return null;
+    }
+
+    return data?.cartCreate?.cart || null;
+  } catch (err) {
+    console.error("createCartWithLines error:", err);
+    return null;
+  }
+}
+
+/**
  * Create a new Shopify cart via the Storefront API.
  * Returns { id, checkoutUrl } or null on failure.
  */
