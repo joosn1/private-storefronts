@@ -150,6 +150,18 @@ function buildStorefrontHtml(storefront, products, shop) {
       </button>
     </div>
   </div>
+
+  <!-- Order confirmation overlay -->
+  <div id="psf-order-confirm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:2.5rem;max-width:420px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+      <div style="font-size:3rem;margin-bottom:1rem;">✅</div>
+      <h2 style="margin:0 0 .5rem;font-size:1.5rem;font-weight:700;">Order Placed!</h2>
+      <p style="color:#555;margin:.5rem 0 .25rem;font-size:.95rem;">Your order <strong id="psf-order-name"></strong> has been received.</p>
+      <p style="color:#555;margin:0 0 1.75rem;font-size:.95rem;">We'll be in touch shortly to confirm details and arrange payment.</p>
+      <button onclick="document.getElementById('psf-order-confirm').style.display='none'" style="padding:.75rem 2rem;background:${accent};color:${contrast};border:none;border-radius:6px;font-size:1rem;font-weight:600;cursor:pointer;">Continue Shopping</button>
+    </div>
+  </div>
+
   <script>
     var _psfSlug='${safeSlug}',_psfShop='${safeShop}';
     (function(){
@@ -165,7 +177,12 @@ function buildStorefrontHtml(storefront, products, shop) {
           var shopParam=_psfShop?'?shop='+encodeURIComponent(_psfShop):'';
           var r=await fetch('/apps/storefronts/'+_psfSlug+'/checkout'+shopParam,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({lines:cartLines.map(function(l){return{variantId:l.id,qty:l.qty,price:l.price,title:l.t};})})});
           var d=await r.json().catch(function(){return{};});
-          if(d.url){localStorage.removeItem(_ck);window.location.href=d.url;}else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
+          if(d.success){
+            localStorage.removeItem(_ck);
+            document.getElementById('cart-panel').style.display='none';
+            var conf=document.getElementById('psf-order-confirm');
+            if(conf){document.getElementById('psf-order-name').textContent=d.orderName||'';conf.style.display='flex';}
+          }else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
         }catch(e){alert('Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
       });
     })();
@@ -485,11 +502,7 @@ async function handleProxyCheckout(req, res) {
           mutation CompleteDraftOrder($id: ID!) {
             draftOrderComplete(id: $id, paymentPending: true) {
               draftOrder {
-                order {
-                  id
-                  name
-                  statusUrl
-                }
+                order { id name }
               }
               userErrors { field message }
             }
@@ -500,10 +513,11 @@ async function handleProxyCheckout(req, res) {
     });
 
     const completeData = await completeRes.json();
+    console.log("draftOrderComplete response:", JSON.stringify(completeData));
     const completeErrors = completeData?.data?.draftOrderComplete?.userErrors;
     if (completeErrors?.length) {
       console.error("Draft order complete userErrors:", JSON.stringify(completeErrors));
-      return res.status(500).json({ error: "Could not complete order. Please try again." });
+      return res.status(500).json({ error: "Could not complete order: " + completeErrors.map(e => e.message).join(", ") });
     }
 
     const order = completeData?.data?.draftOrderComplete?.draftOrder?.order;
@@ -512,7 +526,7 @@ async function handleProxyCheckout(req, res) {
       return res.status(500).json({ error: "Could not complete order. Please try again." });
     }
 
-    res.json({ url: order.statusUrl, orderName: order.name });
+    res.json({ success: true, orderName: order.name });
   } catch (err) {
     console.error("Checkout error:", err);
     res.status(500).json({ error: "Server error" });
