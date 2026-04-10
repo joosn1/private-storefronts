@@ -197,19 +197,15 @@ export default function StorefrontLayout() {
   const headerStyle = {
     background: primaryColor,
     color: "#fff",
-    padding: "14px 24px",
+    padding: "20px 24px",
     position: "relative",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    textAlign: "center",
     minHeight: 160,
   };
 
   const logoCenterStyle = {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 2,
+    display: "inline-block",
+    verticalAlign: "middle",
   };
 
   // ─── Layout wrapper for child routes (auth / login) ───────────────────────
@@ -217,20 +213,16 @@ export default function StorefrontLayout() {
     return (
       <div style={{ minHeight: "100vh", fontFamily: "system-ui, sans-serif" }}>
         <header style={headerStyle}>
-          <div style={logoCenterStyle}>
-            {storefront.logoUrl ? (
-              <img
-                src={storefront.logoUrl}
-                alt={storefront.companyName}
-                style={{ height: 140, maxWidth: 480, objectFit: "contain" }}
-              />
-            ) : (
-              <span style={{ fontWeight: 700, fontSize: 20 }}>
-                {storefront.companyName}
-              </span>
-            )}
-            <span style={{ fontSize: 12, opacity: 0.8 }}>{storefront.name}</span>
-          </div>
+          {storefront.logoUrl ? (
+            <img
+              src={storefront.logoUrl}
+              alt={storefront.companyName}
+              style={{ height: 140, maxWidth: 480, objectFit: "contain", display: "inline-block" }}
+            />
+          ) : (
+            <div style={{ fontWeight: 700, fontSize: 20 }}>{storefront.companyName}</div>
+          )}
+          <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>{storefront.name}</div>
         </header>
         <main>{outlet}</main>
       </div>
@@ -282,25 +274,21 @@ export default function StorefrontLayout() {
         @media (max-width: 600px) { .psf-cart { width: 100vw; } .psf-grid { grid-template-columns: 1fr !important; } }
       `}</style>
 
-      {/* Header — logo absolutely centered, cart pinned to the right */}
+      {/* Header — textAlign:center on the block, cart absolute-right */}
       <header style={headerStyle}>
-        <div style={logoCenterStyle}>
-          {storefront.logoUrl ? (
-            <img
-              src={storefront.logoUrl}
-              alt={storefront.companyName}
-              style={{ height: 140, maxWidth: 480, objectFit: "contain" }}
-            />
-          ) : (
-            <span style={{ fontWeight: 700, fontSize: 20 }}>
-              {storefront.companyName}
-            </span>
-          )}
-          <span style={{ fontSize: 12, opacity: 0.8 }}>{storefront.name}</span>
-        </div>
+        {storefront.logoUrl ? (
+          <img
+            src={storefront.logoUrl}
+            alt={storefront.companyName}
+            style={{ height: 140, maxWidth: 480, objectFit: "contain", display: "inline-block" }}
+          />
+        ) : (
+          <div style={{ fontWeight: 700, fontSize: 20 }}>{storefront.companyName}</div>
+        )}
+        <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>{storefront.name}</div>
 
-        {/* Cart pinned to the right without affecting center calculation */}
-        <div style={{ position: "absolute", right: 24 }}>
+        {/* Cart pinned right, vertically centered */}
+        <div style={{ position: "absolute", right: 24, top: "50%", transform: "translateY(-50%)" }}>
           <button
             className="psf-btn"
             onClick={() => setCartOpen(true)}
