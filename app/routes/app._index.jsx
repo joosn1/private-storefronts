@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -81,6 +81,8 @@ export default function Index() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
 
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
+
   const isLoading = fetcher.state !== "idle";
 
   useEffect(() => {
@@ -92,13 +94,29 @@ export default function Index() {
     }
   }, [fetcher.data, shopify]);
 
+  function handleDelete() {
+    if (!deleteConfirm) return;
+    fetcher.submit(
+      { intent: "delete", id: deleteConfirm.id },
+      { method: "post" },
+    );
+    setDeleteConfirm(null);
+  }
+
+  function handleToggle(sf) {
+    fetcher.submit(
+      { intent: "toggle", id: sf.id },
+      { method: "post" },
+    );
+  }
+
   function getProxyUrl(slug) {
     return `https://${shop}/apps/storefronts/${slug}`;
   }
 
   return (
     <>
-      {/* Button is OUTSIDE s-page so shadow DOM cannot swallow clicks */}
+      {/* Buttons/modals OUTSIDE s-page so shadow DOM cannot swallow clicks */}
       <div style={{ padding: "16px 20px 0", display: "flex", justifyContent: "flex-end" }}>
         <button
           onClick={() => navigate("/app/storefronts/new")}
@@ -116,6 +134,69 @@ export default function Index() {
           + Create New Storefront
         </button>
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              padding: "32px",
+              maxWidth: "420px",
+              width: "90%",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>Delete Storefront</h3>
+            <p style={{ margin: "0 0 24px", color: "#555", fontSize: "14px" }}>
+              Are you sure you want to delete <strong>{deleteConfirm.name}</strong>? This
+              will permanently remove all its products and customer access. This cannot be
+              undone.
+            </p>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                style={{
+                  padding: "10px 20px",
+                  border: "1px solid #ddd",
+                  borderRadius: "6px",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                style={{
+                  padding: "10px 20px",
+                  border: "none",
+                  borderRadius: "6px",
+                  background: "#d72c0d",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <s-page heading="Private Storefronts">
 
@@ -163,6 +244,7 @@ export default function Index() {
                   <s-table-cell>Status</s-table-cell>
                   <s-table-cell>Products</s-table-cell>
                   <s-table-cell>Customers</s-table-cell>
+                  <s-table-cell>Actions</s-table-cell>
                 </s-table-header-row>
               </s-table-header>
               <s-table-body>
@@ -192,6 +274,56 @@ export default function Index() {
                     </s-table-cell>
                     <s-table-cell>
                       <s-text>{sf._count.customers}</s-text>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          onClick={() => navigate(`/app/storefronts/${sf.id}/edit`)}
+                          disabled={isLoading}
+                          style={{
+                            padding: "6px 14px",
+                            border: "1px solid #8c9196",
+                            borderRadius: "6px",
+                            background: "#fff",
+                            cursor: "pointer",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleToggle(sf)}
+                          disabled={isLoading}
+                          style={{
+                            padding: "6px 14px",
+                            border: "1px solid #8c9196",
+                            borderRadius: "6px",
+                            background: "#fff",
+                            cursor: "pointer",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {sf.isActive ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm({ id: sf.id, name: sf.name })}
+                          disabled={isLoading}
+                          style={{
+                            padding: "6px 14px",
+                            border: "1px solid #d72c0d",
+                            borderRadius: "6px",
+                            background: "#fff",
+                            color: "#d72c0d",
+                            cursor: "pointer",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </s-table-cell>
                   </s-table-row>
                 ))}
