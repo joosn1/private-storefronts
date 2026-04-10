@@ -151,17 +151,6 @@ function buildStorefrontHtml(storefront, products, shop) {
     </div>
   </div>
 
-  <!-- Order confirmation overlay -->
-  <div id="psf-order-confirm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:12px;padding:2.5rem;max-width:420px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.2);">
-      <div style="font-size:3rem;margin-bottom:1rem;">✅</div>
-      <h2 style="margin:0 0 .5rem;font-size:1.5rem;font-weight:700;">Order Placed!</h2>
-      <p style="color:#555;margin:.5rem 0 .25rem;font-size:.95rem;">Your order <strong id="psf-order-name"></strong> has been received.</p>
-      <p style="color:#555;margin:0 0 1.75rem;font-size:.95rem;">We'll be in touch shortly to confirm details and arrange payment.</p>
-      <button onclick="document.getElementById('psf-order-confirm').style.display='none'" style="padding:.75rem 2rem;background:${accent};color:${contrast};border:none;border-radius:6px;font-size:1rem;font-weight:600;cursor:pointer;">Continue Shopping</button>
-    </div>
-  </div>
-
   <script>
     var _psfSlug='${safeSlug}',_psfShop='${safeShop}';
     (function(){
@@ -177,12 +166,7 @@ function buildStorefrontHtml(storefront, products, shop) {
           var shopParam=_psfShop?'?shop='+encodeURIComponent(_psfShop):'';
           var r=await fetch('/apps/storefronts/'+_psfSlug+'/checkout'+shopParam,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({lines:cartLines.map(function(l){return{variantId:l.id,qty:l.qty,price:l.price,title:l.t};})})});
           var d=await r.json().catch(function(){return{};});
-          if(d.success){
-            localStorage.removeItem(_ck);
-            document.getElementById('cart-panel').style.display='none';
-            var conf=document.getElementById('psf-order-confirm');
-            if(conf){document.getElementById('psf-order-name').textContent=d.orderName||'';conf.style.display='flex';}
-          }else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
+          if(d.url){localStorage.removeItem(_ck);window.location.href=d.url;}else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
         }catch(e){alert('Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
       });
     })();
@@ -462,7 +446,9 @@ async function handleProxyCheckout(req, res) {
       "X-Shopify-Access-Token": session.accessToken,
     };
 
-    // Step 1: Create the draft order (required to set originalUnitPrice for custom pricing)
+    // Create draft order with custom pricing, then send customer to invoiceUrl
+    // which is the real Shopify checkout page. When the customer pays, Shopify
+    // automatically converts the draft order into a live order.
     const createRes = await fetch(apiBase, {
       method: "POST",
       headers: apiHeaders,
@@ -470,7 +456,7 @@ async function handleProxyCheckout(req, res) {
         query: `
           mutation CreateDraftOrder($input: DraftOrderInput!) {
             draftOrderCreate(input: $input) {
-              draftOrder { id }
+              draftOrder { id invoiceUrl }
               userErrors { field message }
             }
           }
@@ -483,50 +469,16 @@ async function handleProxyCheckout(req, res) {
     const createErrors = createData?.data?.draftOrderCreate?.userErrors;
     if (createErrors?.length) {
       console.error("Draft order userErrors:", JSON.stringify(createErrors));
-      return res.status(500).json({ error: "Could not create order. Please try again." });
+      return res.status(500).json({ error: "Could not create order: " + createErrors.map(e => e.message).join(", ") });
     }
 
-    const draftOrderId = createData?.data?.draftOrderCreate?.draftOrder?.id;
-    if (!draftOrderId) {
+    const draftOrder = createData?.data?.draftOrderCreate?.draftOrder;
+    if (!draftOrder?.invoiceUrl) {
       console.error("Draft order creation failed:", JSON.stringify(createData));
       return res.status(500).json({ error: "Could not create order. Please try again." });
     }
 
-    // Step 2: Complete the draft order immediately → creates a live Shopify order
-    // paymentPending: true marks it as payment pending (standard B2B flow)
-    const completeRes = await fetch(apiBase, {
-      method: "POST",
-      headers: apiHeaders,
-      body: JSON.stringify({
-        query: `
-          mutation CompleteDraftOrder($id: ID!) {
-            draftOrderComplete(id: $id, paymentPending: true) {
-              draftOrder {
-                order { id name }
-              }
-              userErrors { field message }
-            }
-          }
-        `,
-        variables: { id: draftOrderId },
-      }),
-    });
-
-    const completeData = await completeRes.json();
-    console.log("draftOrderComplete response:", JSON.stringify(completeData));
-    const completeErrors = completeData?.data?.draftOrderComplete?.userErrors;
-    if (completeErrors?.length) {
-      console.error("Draft order complete userErrors:", JSON.stringify(completeErrors));
-      return res.status(500).json({ error: "Could not complete order: " + completeErrors.map(e => e.message).join(", ") });
-    }
-
-    const order = completeData?.data?.draftOrderComplete?.draftOrder?.order;
-    if (!order) {
-      console.error("Draft order complete failed:", JSON.stringify(completeData));
-      return res.status(500).json({ error: "Could not complete order. Please try again." });
-    }
-
-    res.json({ success: true, orderName: order.name });
+    res.json({ url: draftOrder.invoiceUrl });
   } catch (err) {
     console.error("Checkout error:", err);
     res.status(500).json({ error: "Server error" });
