@@ -111,7 +111,7 @@ function buildStorefrontHtml(storefront, products, shop) {
 <body>
   <header style="background:${accent};color:${contrast};padding:1.5rem;position:relative;text-align:center;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
     ${storefront.logoUrl ? `<img src="${esc(storefront.logoUrl)}" alt="${esc(storefront.name)}" style="display:block;max-height:140px;max-width:480px;object-fit:contain;">` : `<div style="font-weight:700;font-size:1.375rem;">${esc(storefront.name)}</div>`}
-    <div style="font-size:.875rem;opacity:.85;margin-top:.375rem;">${esc(storefront.companyName)}</div>
+    <div style="font-size:1.5rem;font-weight:800;margin-top:.5rem;letter-spacing:-.01em;">${esc(storefront.companyName)}</div>
     <button id="cart-toggle" style="position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.2);border:none;cursor:pointer;color:${contrast};display:flex;align-items:center;gap:.5rem;font-size:1rem;padding:.5rem 1rem;border-radius:6px;">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
