@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
+import { Form, redirect, useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -52,7 +52,7 @@ export const action = async ({ request }) => {
     await prisma.storefront.deleteMany({
       where: { id, shopDomain: session.shop },
     });
-    return { success: true, message: "Storefront deleted" };
+    return redirect("/app?flash=deleted");
   }
 
   if (intent === "toggle") {
@@ -82,12 +82,21 @@ export default function Index() {
   const navigate = useNavigate();
 
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const isLoading = fetcher.state !== "idle";
 
+  // Toast for delete (comes back via redirect ?flash=deleted)
+  useEffect(() => {
+    if (searchParams.get("flash") === "deleted") {
+      shopify.toast.show("Storefront deleted");
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, shopify, setSearchParams]);
+
+  // Toast for toggle
   useEffect(() => {
     if (fetcher.data?.success && fetcher.data?.message) {
-      setDeleteConfirm(null);
       shopify.toast.show(fetcher.data.message);
     }
     if (fetcher.data?.error) {
@@ -156,7 +165,7 @@ export default function Index() {
               will permanently remove all its products and customer access. This cannot be
               undone.
             </p>
-            <fetcher.Form method="post">
+            <Form method="post">
               <input type="hidden" name="intent" value="delete" />
               <input type="hidden" name="id" value={deleteConfirm.id} />
               <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
@@ -176,7 +185,6 @@ export default function Index() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading}
                   style={{
                     padding: "10px 20px",
                     border: "none",
@@ -186,13 +194,12 @@ export default function Index() {
                     cursor: "pointer",
                     fontSize: "14px",
                     fontWeight: 600,
-                    opacity: isLoading ? 0.6 : 1,
                   }}
                 >
-                  {isLoading ? "Deleting..." : "Delete"}
+                  Delete
                 </button>
               </div>
-            </fetcher.Form>
+            </Form>
           </div>
         </div>
       )}
