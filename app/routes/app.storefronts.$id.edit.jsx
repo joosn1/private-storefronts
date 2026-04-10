@@ -206,6 +206,7 @@ export default function EditStorefront() {
   const navigate = useNavigate();
   const saveFetcher = useFetcher();
   const productsFetcher = useFetcher();
+  const skuFetcher = useFetcher();
   const customerFetcher = useFetcher();
   const companyFetcher = useFetcher();
 
@@ -248,6 +249,11 @@ export default function EditStorefront() {
   const [productsLoaded, setProductsLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchTimeout = useRef(null);
+
+  // ── Bulk SKU import ──────────────────────────────────────────────────────────
+  const [skuText, setSkuText] = useState("");
+  const [skuPanelOpen, setSkuPanelOpen] = useState(false);
+  const [skuResults, setSkuResults] = useState(null); // { variants, notFound }
 
   const isSaving = saveFetcher.state !== "idle";
 
@@ -361,6 +367,12 @@ export default function EditStorefront() {
   }, [productsFetcher.data, productsFetcher.state]);
 
   useEffect(() => {
+    if (skuFetcher.data && skuFetcher.state === "idle") {
+      setSkuResults(skuFetcher.data);
+    }
+  }, [skuFetcher.data, skuFetcher.state]);
+
+  useEffect(() => {
     if (step === 2 && !productsLoaded) {
       productsFetcher.load("/app/storefronts/products?first=50");
     }
@@ -460,6 +472,47 @@ export default function EditStorefront() {
         (v) => !visibleVariantIds.has(v.variantId),
       ),
     }));
+  }
+
+  function lookupSkus() {
+    const skus = skuText
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!skus.length) return;
+    setSkuResults(null);
+    skuFetcher.submit(
+      { skus },
+      { method: "post", action: "/app/storefronts/sku-lookup", encType: "application/json" },
+    );
+  }
+
+  function addSkuMatches(variants) {
+    const toAdd = [];
+    for (const v of variants) {
+      if (!form.selectedVariants.some((sv) => sv.variantId === v.variantId)) {
+        toAdd.push({
+          productId: v.productId,
+          variantId: v.variantId,
+          customPrice: "",
+          productTitle: v.productTitle,
+          productImage: v.productImage || null,
+          variantTitle: v.variantTitle || "",
+          variantSku: v.variantSku || "",
+          basePrice: v.price,
+          availableForSale: v.availableForSale,
+        });
+      }
+    }
+    if (toAdd.length) {
+      setForm((prev) => ({ ...prev, selectedVariants: [...prev.selectedVariants, ...toAdd] }));
+      shopify.toast.show(`Added ${toAdd.length} variant${toAdd.length !== 1 ? "s" : ""}`);
+    } else {
+      shopify.toast.show("All matched variants are already added");
+    }
+    setSkuText("");
+    setSkuResults(null);
+    setSkuPanelOpen(false);
   }
 
   function handleSearch(value) {
@@ -748,6 +801,80 @@ export default function EditStorefront() {
       {step === 2 && (
         <s-section heading="Select Products">
           <s-stack direction="block" gap="base">
+
+            {/* ── Bulk SKU Import ── */}
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-stack direction="block" gap="small">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <s-text fontWeight="bold">Bulk Add by SKU</s-text>
+                  <button
+                    onClick={() => { setSkuPanelOpen((o) => !o); setSkuResults(null); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: "13px", color: "#2c6ecb", padding: 0 }}
+                  >
+                    {skuPanelOpen ? "Hide" : "Paste a list of SKUs to add products in bulk"}
+                  </button>
+                </div>
+
+                {skuPanelOpen && (
+                  <s-stack direction="block" gap="small">
+                    <textarea
+                      value={skuText}
+                      onChange={(e) => { setSkuText(e.target.value); setSkuResults(null); }}
+                      placeholder={"Paste SKUs here — one per line or comma-separated:\nBOLT-1234\nNUT-5678\nWASHER-91011"}
+                      rows={6}
+                      style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px", fontFamily: "monospace", fontSize: "13px", resize: "vertical", boxSizing: "border-box" }}
+                    />
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        onClick={lookupSkus}
+                        disabled={skuFetcher.state !== "idle" || !skuText.trim()}
+                        style={{ padding: "8px 18px", background: "#303030", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: 600, opacity: (skuFetcher.state !== "idle" || !skuText.trim()) ? 0.5 : 1 }}
+                      >
+                        {skuFetcher.state !== "idle" ? "Looking up…" : "Look Up SKUs"}
+                      </button>
+                    </div>
+
+                    {/* Results */}
+                    {skuResults && (
+                      <s-stack direction="block" gap="small">
+                        {skuResults.variants?.length > 0 && (
+                          <s-banner tone="success">
+                            <s-stack direction="block" gap="small-200">
+                              <s-text fontWeight="bold">
+                                {skuResults.variants.length} variant{skuResults.variants.length !== 1 ? "s" : ""} found
+                              </s-text>
+                              <div style={{ maxHeight: "200px", overflowY: "auto", fontSize: "13px" }}>
+                                {skuResults.variants.map((v) => (
+                                  <div key={v.variantId} style={{ padding: "3px 0", borderBottom: "1px solid rgba(0,0,0,.06)" }}>
+                                    <strong>{v.sku}</strong> — {v.productTitle}{v.variantTitle ? ` · ${v.variantTitle}` : ""} · ${parseFloat(v.price).toFixed(2)}
+                                  </div>
+                                ))}
+                              </div>
+                              <button
+                                onClick={() => addSkuMatches(skuResults.variants)}
+                                style={{ padding: "8px 18px", background: "#008060", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "13px", fontWeight: 600, alignSelf: "flex-start" }}
+                              >
+                                Add All {skuResults.variants.length} to Storefront
+                              </button>
+                            </s-stack>
+                          </s-banner>
+                        )}
+                        {skuResults.notFound?.length > 0 && (
+                          <s-banner tone="warning">
+                            <s-text fontWeight="bold">SKUs not found ({skuResults.notFound.length}):</s-text>
+                            <s-text>{skuResults.notFound.join(", ")}</s-text>
+                          </s-banner>
+                        )}
+                        {skuResults.variants?.length === 0 && skuResults.notFound?.length === 0 && (
+                          <s-banner tone="warning"><s-text>No SKUs entered.</s-text></s-banner>
+                        )}
+                      </s-stack>
+                    )}
+                  </s-stack>
+                )}
+              </s-stack>
+            </s-box>
+
             <s-stack direction="inline" gap="base">
               <s-text>
                 {form.selectedVariants.length} variant
