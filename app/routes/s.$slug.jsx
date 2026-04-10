@@ -194,35 +194,26 @@ export default function StorefrontLayout() {
     );
   }
 
-  const headerStyle = {
-    background: primaryColor,
-    color: "#fff",
-    padding: "20px 24px",
-    position: "relative",
-    textAlign: "center",
-    minHeight: 160,
-  };
-
-  const logoCenterStyle = {
-    display: "inline-block",
-    verticalAlign: "middle",
-  };
-
   // ─── Layout wrapper for child routes (auth / login) ───────────────────────
   if (outlet) {
     return (
       <div style={{ minHeight: "100vh", fontFamily: "system-ui, sans-serif" }}>
-        <header style={headerStyle}>
+        <style>{`
+          .psf-header { padding: 20px 24px; position: relative; min-height: 160px; color: #fff; text-align: center; }
+          .psf-header-logo { display: block !important; margin-left: auto !important; margin-right: auto !important; height: 140px; max-width: 480px; object-fit: contain; }
+          .psf-header-name { font-size: 12px; opacity: 0.8; margin-top: 6px; }
+        `}</style>
+        <header className="psf-header" style={{ background: primaryColor }}>
           {storefront.logoUrl ? (
             <img
+              className="psf-header-logo"
               src={storefront.logoUrl}
               alt={storefront.companyName}
-              style={{ height: 140, maxWidth: 480, objectFit: "contain", display: "inline-block" }}
             />
           ) : (
             <div style={{ fontWeight: 700, fontSize: 20 }}>{storefront.companyName}</div>
           )}
-          <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>{storefront.name}</div>
+          <div className="psf-header-name">{storefront.name}</div>
         </header>
         <main>{outlet}</main>
       </div>
@@ -264,6 +255,10 @@ export default function StorefrontLayout() {
       }}
     >
       <style>{`
+        .psf-header { padding: 20px 24px; position: relative; min-height: 160px; color: #fff; text-align: center; }
+        .psf-header-logo { display: block !important; margin-left: auto !important; margin-right: auto !important; height: 140px; max-width: 480px; object-fit: contain; }
+        .psf-header-name { font-size: 12px; opacity: 0.8; margin-top: 6px; }
+        .psf-header-cart { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); }
         .psf-card { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.1); transition: box-shadow .2s; }
         .psf-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); }
         .psf-btn { border: none; border-radius: 6px; padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 600; transition: opacity .15s; }
@@ -274,21 +269,19 @@ export default function StorefrontLayout() {
         @media (max-width: 600px) { .psf-cart { width: 100vw; } .psf-grid { grid-template-columns: 1fr !important; } }
       `}</style>
 
-      {/* Header — textAlign:center on the block, cart absolute-right */}
-      <header style={headerStyle}>
+      {/* Header */}
+      <header className="psf-header" style={{ background: primaryColor }}>
         {storefront.logoUrl ? (
           <img
+            className="psf-header-logo"
             src={storefront.logoUrl}
             alt={storefront.companyName}
-            style={{ height: 140, maxWidth: 480, objectFit: "contain", display: "inline-block" }}
           />
         ) : (
           <div style={{ fontWeight: 700, fontSize: 20 }}>{storefront.companyName}</div>
         )}
-        <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>{storefront.name}</div>
-
-        {/* Cart pinned right, vertically centered */}
-        <div style={{ position: "absolute", right: 24, top: "50%", transform: "translateY(-50%)" }}>
+        <div className="psf-header-name">{storefront.name}</div>
+        <div className="psf-header-cart">
           <button
             className="psf-btn"
             onClick={() => setCartOpen(true)}
