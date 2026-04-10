@@ -73,7 +73,9 @@ function buildStorefrontHtml(storefront, products, shop) {
         ).join("")
       : "";
 
-    return `<div class="product-card" data-product-id="${esc(product.id)}">
+    const searchText = [product.title, ...product.variants.map(v => v.title)].join(" ").toLowerCase();
+
+    return `<div class="product-card" data-product-id="${esc(product.id)}" data-search-text="${esc(searchText)}">
   ${product.image ? `<img src="${esc(product.image)}" alt="${esc(product.imageAlt)}" style="width:100%;height:220px;object-fit:cover;">` : `<div style="width:100%;height:220px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;font-size:.875rem;">No image</div>`}
   <div style="padding:1rem;">
     <h3 style="margin:0 0 .5rem;font-size:1rem;font-weight:600;">${esc(product.title)}</h3>
@@ -106,12 +108,20 @@ function buildStorefrontHtml(storefront, products, shop) {
     @media(max-width:600px){.product-grid{grid-template-columns:1fr;}}
     .product-card{background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);}
     .product-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.12);transition:box-shadow .2s;}
+    #psf-search{background:rgba(255,255,255,.95)!important;color:#111!important;}
+    #psf-search::placeholder{color:#888;}
   </style>
 </head>
 <body>
   <header style="background:${accent};color:${contrast};padding:1.5rem;position:relative;text-align:center;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
     ${storefront.logoUrl ? `<img src="${esc(storefront.logoUrl)}" alt="${esc(storefront.name)}" style="display:block;max-height:140px;max-width:480px;object-fit:contain;">` : `<div style="font-weight:700;font-size:1.375rem;">${esc(storefront.name)}</div>`}
     <div style="font-size:1.5rem;font-weight:800;margin-top:.5rem;letter-spacing:-.01em;">${esc(storefront.companyName)}</div>
+    <div style="position:absolute;left:1.5rem;top:50%;transform:translateY(-50%);">
+      <div style="position:relative;">
+        <svg style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);opacity:.5;pointer-events:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="psf-search" type="search" placeholder="Search part number…" style="padding:.55rem .75rem .55rem 2.1rem;border:1px solid rgba(255,255,255,.4);border-radius:6px;font-size:.875rem;width:220px;outline:none;" />
+      </div>
+    </div>
     <button id="cart-toggle" style="position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.2);border:none;cursor:pointer;color:${contrast};display:flex;align-items:center;gap:.5rem;font-size:1rem;padding:.5rem 1rem;border-radius:6px;">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
@@ -123,7 +133,7 @@ function buildStorefrontHtml(storefront, products, shop) {
   <main style="max-width:1200px;margin:0 auto;padding:2rem 1rem;">
     ${products.length === 0
       ? `<div style="text-align:center;padding:3rem;color:#666;"><p style="font-size:1.125rem;">No products are currently available in this storefront.</p></div>`
-      : `<div class="product-grid">${productCards}</div>`}
+      : `<div class="product-grid">${productCards}</div><div id="psf-no-results" style="display:none;text-align:center;padding:3rem;color:#666;font-size:1.125rem;">No products match your search.</div>`}
   </main>
   <div id="cart-panel" style="display:none;position:fixed;right:0;top:0;bottom:0;width:360px;background:white;box-shadow:-4px 0 20px rgba(0,0,0,.15);z-index:1000;overflow:auto;padding:1.5rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
@@ -156,6 +166,23 @@ function buildStorefrontHtml(storefront, products, shop) {
           var d=await r.json().catch(function(){return{};});
           if(d.url){window.location.href=d.url;}else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
         }catch(e){alert('Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
+      });
+    })();
+    (function(){
+      var searchInput=document.getElementById('psf-search');
+      if(!searchInput)return;
+      var noResults=document.getElementById('psf-no-results');
+      searchInput.addEventListener('input',function(){
+        var q=this.value.trim().toLowerCase();
+        var cards=document.querySelectorAll('.product-card');
+        var visible=0;
+        cards.forEach(function(card){
+          var text=card.getAttribute('data-search-text')||'';
+          var show=!q||text.indexOf(q)!==-1;
+          card.style.display=show?'':'none';
+          if(show)visible++;
+        });
+        if(noResults){noResults.style.display=visible===0&&q?'block':'none';}
       });
     })();
     ${cartScript}
