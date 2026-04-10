@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { Form, redirect, useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+
+// ─── Server ──────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -17,15 +19,6 @@ export const loader = async ({ request }) => {
     orderBy: { createdAt: "desc" },
   });
 
-  const totalProducts = storefronts.reduce(
-    (sum, s) => sum + s._count.products,
-    0,
-  );
-  const totalCustomers = storefronts.reduce(
-    (sum, s) => sum + s._count.customers,
-    0,
-  );
-  const activeCount = storefronts.filter((s) => s.isActive).length;
   const appUrl = process.env.SHOPIFY_APP_URL || "";
 
   return {
@@ -34,9 +27,6 @@ export const loader = async ({ request }) => {
       createdAt: s.createdAt.toISOString(),
       updatedAt: s.updatedAt.toISOString(),
     })),
-    totalProducts,
-    totalCustomers,
-    activeCount,
     appUrl,
     shop,
   };
@@ -44,15 +34,21 @@ export const loader = async ({ request }) => {
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const formData = await request.formData();
-  const intent = formData.get("intent");
-  const id = formData.get("id");
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return { error: "Invalid request body" };
+  }
+
+  const { intent, id } = body;
 
   if (intent === "delete") {
     await prisma.storefront.deleteMany({
       where: { id, shopDomain: session.shop },
     });
-    return redirect("/app?flash=deleted");
+    return { success: true, message: "Storefront deleted", deletedId: id };
   }
 
   if (intent === "toggle") {
@@ -64,56 +60,96 @@ export const action = async ({ request }) => {
         where: { id },
         data: { isActive: !storefront.isActive },
       });
+      return {
+        success: true,
+        message: storefront.isActive ? "Storefront deactivated" : "Storefront activated",
+        toggledId: id,
+        newIsActive: !storefront.isActive,
+      };
     }
-    return {
-      success: true,
-      message: storefront?.isActive ? "Storefront deactivated" : "Storefront activated",
-    };
   }
 
   return { error: "Unknown action" };
 };
 
+// Skip automatic loader revalidation — we update local state directly instead.
+// This prevents the loader's authenticate.admin from causing a stuck fetcher
+// in the Shopify embedded app context.
+export const shouldRevalidate = ({ actionResult }) => {
+  if (actionResult?.deletedId || actionResult?.toggledId) return false;
+  return true;
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function Index() {
-  const { storefronts, totalProducts, totalCustomers, activeCount, shop } =
-    useLoaderData();
+  const loaderData = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
 
+  // Manage storefronts in local state so we can update without revalidation
+  const [storefronts, setStorefronts] = useState(loaderData.storefronts);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  const isLoading = fetcher.state !== "idle";
-
-  // Toast for delete (comes back via redirect ?flash=deleted)
+  // Sync if loader data changes (e.g. initial load or manual navigation)
   useEffect(() => {
-    if (searchParams.get("flash") === "deleted") {
-      shopify.toast.show("Storefront deleted");
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, shopify, setSearchParams]);
+    setStorefronts(loaderData.storefronts);
+  }, [loaderData.storefronts]);
 
-  // Toast for toggle
+  // Handle fetcher responses
   useEffect(() => {
-    if (fetcher.data?.success && fetcher.data?.message) {
+    if (!fetcher.data) return;
+
+    if (fetcher.data.deletedId) {
+      setStorefronts((prev) => prev.filter((s) => s.id !== fetcher.data.deletedId));
+      setDeleteConfirm(null);
       shopify.toast.show(fetcher.data.message);
+      return;
     }
-    if (fetcher.data?.error) {
+
+    if (fetcher.data.toggledId) {
+      setStorefronts((prev) =>
+        prev.map((s) =>
+          s.id === fetcher.data.toggledId
+            ? { ...s, isActive: fetcher.data.newIsActive }
+            : s,
+        ),
+      );
+      shopify.toast.show(fetcher.data.message);
+      return;
+    }
+
+    if (fetcher.data.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
   }, [fetcher.data, shopify]);
 
+  function handleDelete() {
+    if (!deleteConfirm) return;
+    fetcher.submit(
+      { intent: "delete", id: deleteConfirm.id },
+      { method: "post", encType: "application/json" },
+    );
+  }
+
   function handleToggle(sf) {
     fetcher.submit(
       { intent: "toggle", id: sf.id },
-      { method: "post" },
+      { method: "post", encType: "application/json" },
     );
   }
 
   function getProxyUrl(slug) {
-    return `https://${shop}/apps/storefronts/${slug}`;
+    return `https://${loaderData.shop}/apps/storefronts/${slug}`;
   }
+
+  // Derive stats from local state
+  const activeCount = storefronts.filter((s) => s.isActive).length;
+  const totalProducts = storefronts.reduce((sum, s) => sum + s._count.products, 0);
+  const totalCustomers = storefronts.reduce((sum, s) => sum + s._count.customers, 0);
+
+  const isLoading = fetcher.state !== "idle";
 
   return (
     <>
@@ -136,7 +172,7 @@ export default function Index() {
         </button>
       </div>
 
-      {/* Delete confirmation modal */}
+      {/* Delete confirmation modal — also outside s-page */}
       {deleteConfirm && (
         <div
           style={{
@@ -165,41 +201,38 @@ export default function Index() {
               will permanently remove all its products and customer access. This cannot be
               undone.
             </p>
-            <Form method="post">
-              <input type="hidden" name="intent" value="delete" />
-              <input type="hidden" name="id" value={deleteConfirm.id} />
-              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirm(null)}
-                  style={{
-                    padding: "10px 20px",
-                    border: "1px solid #ddd",
-                    borderRadius: "6px",
-                    background: "#fff",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "10px 20px",
-                    border: "none",
-                    borderRadius: "6px",
-                    background: "#d72c0d",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    fontWeight: 600,
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </Form>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                style={{
+                  padding: "10px 20px",
+                  border: "1px solid #ddd",
+                  borderRadius: "6px",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isLoading}
+                style={{
+                  padding: "10px 20px",
+                  border: "none",
+                  borderRadius: "6px",
+                  background: "#d72c0d",
+                  color: "#fff",
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  opacity: isLoading ? 0.6 : 1,
+                }}
+              >
+                {isLoading ? "Deleting…" : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}
