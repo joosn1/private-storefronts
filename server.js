@@ -109,13 +109,10 @@ function buildStorefrontHtml(storefront, products, shop) {
   </style>
 </head>
 <body>
-  <header style="background:${accent};color:${contrast};padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;">
-    ${storefront.logoUrl ? `<img src="${esc(storefront.logoUrl)}" alt="${esc(storefront.name)}" style="height:44px;object-fit:contain;">` : ""}
-    <div style="flex:1;">
-      <div style="font-weight:700;font-size:1.375rem;">${esc(storefront.name)}</div>
-      <div style="font-size:.875rem;opacity:.85;">${esc(storefront.companyName)}</div>
-    </div>
-    <button id="cart-toggle" style="background:transparent;border:none;cursor:pointer;color:${contrast};display:flex;align-items:center;gap:.5rem;font-size:1rem;padding:.5rem;border-radius:6px;">
+  <header style="background:${accent};color:${contrast};padding:1.5rem;position:relative;text-align:center;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+    ${storefront.logoUrl ? `<img src="${esc(storefront.logoUrl)}" alt="${esc(storefront.name)}" style="display:block;max-height:140px;max-width:480px;object-fit:contain;">` : `<div style="font-weight:700;font-size:1.375rem;">${esc(storefront.name)}</div>`}
+    <div style="font-size:.875rem;opacity:.85;margin-top:.375rem;">${esc(storefront.companyName)}</div>
+    <button id="cart-toggle" style="position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.2);border:none;cursor:pointer;color:${contrast};display:flex;align-items:center;gap:.5rem;font-size:1rem;padding:.5rem 1rem;border-radius:6px;">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
         <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
