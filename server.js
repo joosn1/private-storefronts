@@ -264,7 +264,8 @@ function buildLoginHtml(storefront, proxyBase, error) {
 function buildCartScript(accentColor) {
   return `(function(){
   function numId(gid){var p=String(gid||'').split('/');return parseInt(p[p.length-1],10)||null;}
-  let lines=JSON.parse(localStorage.getItem('psf_cart_lines')||'[]');
+  var _cartKey='psf_cart_lines_'+_psfSlug;
+  let lines=JSON.parse(localStorage.getItem(_cartKey)||'[]');
   var btnStyle='width:28px;height:28px;border:1px solid #ddd;border-radius:4px;background:white;cursor:pointer;font-size:1rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;';
   function fmtCur(amount,cur){return new Intl.NumberFormat('en-US',{style:'currency',currency:cur||'USD'}).format(amount);}
   function updateUI(){
@@ -307,7 +308,7 @@ function buildCartScript(accentColor) {
     }
     if(fe)fe.style.display=lines.length?'block':'none';
     if(te)te.textContent=fmtCur(tot,'USD');
-    localStorage.setItem('psf_cart_lines',JSON.stringify(lines));
+    localStorage.setItem(_cartKey,JSON.stringify(lines));
   }
   async function addToCart(vid,vt,title,price,cur){
     var id=numId(vid);
