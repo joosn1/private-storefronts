@@ -194,29 +194,43 @@ export default function StorefrontLayout() {
     );
   }
 
-  const headerBase = {
+  const headerStyle = {
     background: primaryColor,
     color: "#fff",
     padding: "14px 24px",
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 72,
+  };
+
+  const logoCenterStyle = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 2,
   };
 
   // ─── Layout wrapper for child routes (auth / login) ───────────────────────
   if (outlet) {
     return (
       <div style={{ minHeight: "100vh", fontFamily: "system-ui, sans-serif" }}>
-        <header style={{ ...headerBase, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          {storefront.logoUrl ? (
-            <img
-              src={storefront.logoUrl}
-              alt={storefront.companyName}
-              style={{ height: 48, maxWidth: 200, objectFit: "contain" }}
-            />
-          ) : (
-            <span style={{ fontWeight: 700, fontSize: 20 }}>
-              {storefront.companyName}
-            </span>
-          )}
-          <span style={{ fontSize: 12, opacity: 0.8 }}>{storefront.name}</span>
+        <header style={headerStyle}>
+          <div style={logoCenterStyle}>
+            {storefront.logoUrl ? (
+              <img
+                src={storefront.logoUrl}
+                alt={storefront.companyName}
+                style={{ height: 48, maxWidth: 200, objectFit: "contain" }}
+              />
+            ) : (
+              <span style={{ fontWeight: 700, fontSize: 20 }}>
+                {storefront.companyName}
+              </span>
+            )}
+            <span style={{ fontSize: 12, opacity: 0.8 }}>{storefront.name}</span>
+          </div>
         </header>
         <main>{outlet}</main>
       </div>
@@ -268,21 +282,9 @@ export default function StorefrontLayout() {
         @media (max-width: 600px) { .psf-cart { width: 100vw; } .psf-grid { grid-template-columns: 1fr !important; } }
       `}</style>
 
-      {/* Header — three-column grid so logo stays perfectly centered */}
-      <header
-        style={{
-          ...headerBase,
-          display: "grid",
-          gridTemplateColumns: "1fr auto 1fr",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        {/* Left spacer — mirrors cart button column so center stays true */}
-        <div />
-
-        {/* Centered logo / company name */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+      {/* Header — logo absolutely centered, cart pinned to the right */}
+      <header style={headerStyle}>
+        <div style={logoCenterStyle}>
           {storefront.logoUrl ? (
             <img
               src={storefront.logoUrl}
@@ -297,8 +299,8 @@ export default function StorefrontLayout() {
           <span style={{ fontSize: 12, opacity: 0.8 }}>{storefront.name}</span>
         </div>
 
-        {/* Cart button — right-aligned */}
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        {/* Cart pinned to the right without affecting center calculation */}
+        <div style={{ position: "absolute", right: 24 }}>
           <button
             className="psf-btn"
             onClick={() => setCartOpen(true)}
