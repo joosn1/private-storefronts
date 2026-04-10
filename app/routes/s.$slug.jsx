@@ -202,7 +202,7 @@ export default function StorefrontLayout() {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 72,
+    minHeight: 100,
   };
 
   const logoCenterStyle = {
@@ -222,7 +222,7 @@ export default function StorefrontLayout() {
               <img
                 src={storefront.logoUrl}
                 alt={storefront.companyName}
-                style={{ height: 48, maxWidth: 200, objectFit: "contain" }}
+                style={{ height: 80, maxWidth: 320, objectFit: "contain" }}
               />
             ) : (
               <span style={{ fontWeight: 700, fontSize: 20 }}>
@@ -289,7 +289,7 @@ export default function StorefrontLayout() {
             <img
               src={storefront.logoUrl}
               alt={storefront.companyName}
-              style={{ height: 48, maxWidth: 200, objectFit: "contain" }}
+              style={{ height: 80, maxWidth: 320, objectFit: "contain" }}
             />
           ) : (
             <span style={{ fontWeight: 700, fontSize: 20 }}>
