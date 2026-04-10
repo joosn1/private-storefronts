@@ -87,21 +87,13 @@ export default function Index() {
 
   useEffect(() => {
     if (fetcher.data?.success && fetcher.data?.message) {
+      setDeleteConfirm(null);
       shopify.toast.show(fetcher.data.message);
     }
     if (fetcher.data?.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
   }, [fetcher.data, shopify]);
-
-  function handleDelete() {
-    if (!deleteConfirm) return;
-    fetcher.submit(
-      { intent: "delete", id: deleteConfirm.id },
-      { method: "post" },
-    );
-    setDeleteConfirm(null);
-  }
 
   function handleToggle(sf) {
     fetcher.submit(
@@ -164,36 +156,43 @@ export default function Index() {
               will permanently remove all its products and customer access. This cannot be
               undone.
             </p>
-            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                style={{
-                  padding: "10px 20px",
-                  border: "1px solid #ddd",
-                  borderRadius: "6px",
-                  background: "#fff",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                style={{
-                  padding: "10px 20px",
-                  border: "none",
-                  borderRadius: "6px",
-                  background: "#d72c0d",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                }}
-              >
-                Delete
-              </button>
-            </div>
+            <fetcher.Form method="post">
+              <input type="hidden" name="intent" value="delete" />
+              <input type="hidden" name="id" value={deleteConfirm.id} />
+              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirm(null)}
+                  style={{
+                    padding: "10px 20px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    background: "#fff",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  style={{
+                    padding: "10px 20px",
+                    border: "none",
+                    borderRadius: "6px",
+                    background: "#d72c0d",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: 600,
+                    opacity: isLoading ? 0.6 : 1,
+                  }}
+                >
+                  {isLoading ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </fetcher.Form>
           </div>
         </div>
       )}
