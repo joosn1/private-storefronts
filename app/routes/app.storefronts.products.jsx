@@ -40,6 +40,7 @@ export const loader = async ({ request }) => {
                   node {
                     id
                     title
+                    sku
                     price
                     availableForSale
                   }
@@ -71,6 +72,7 @@ export const loader = async ({ request }) => {
     variants: e.node.variants.edges.map((ve) => ({
       id: ve.node.id,
       title: ve.node.title,
+      sku: ve.node.sku || "",
       price: ve.node.price,
       availableForSale: ve.node.availableForSale,
     })),

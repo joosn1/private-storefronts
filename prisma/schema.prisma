@@ -62,6 +62,7 @@ model StorefrontProduct {
   productTitle     String     @default("")
   productImage     String?
   variantTitle     String     @default("")
+  variantSku       String     @default("")
   basePrice        String     @default("0")
   availableForSale Boolean    @default(true)
   isVisible        Boolean    @default(true)

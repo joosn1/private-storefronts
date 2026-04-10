@@ -73,7 +73,7 @@ function buildStorefrontHtml(storefront, products, shop) {
         ).join("")
       : "";
 
-    const searchText = [product.title, ...product.variants.map(v => v.title)].join(" ").toLowerCase();
+    const searchText = [product.title, ...product.variants.map(v => v.title), ...product.variants.map(v => v.sku)].join(" ").toLowerCase();
 
     return `<div class="product-card" data-product-id="${esc(product.id)}" data-search-text="${esc(searchText)}">
   ${product.image ? `<img src="${esc(product.image)}" alt="${esc(product.imageAlt)}" style="width:100%;height:220px;object-fit:cover;">` : `<div style="width:100%;height:220px;background:#eee;display:flex;align-items:center;justify-content:center;color:#999;font-size:.875rem;">No image</div>`}
@@ -540,6 +540,7 @@ async function handleProxyMain(req, res) {
       productMap.get(sp.shopifyProductId).variants.push({
         id: sp.shopifyVariantId,
         title: sp.variantTitle || "Default",
+        sku: sp.variantSku || "",
         price: displayPrice,
         currencyCode: "USD",
         availableForSale: sp.availableForSale,

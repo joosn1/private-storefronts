@@ -81,6 +81,7 @@ export const action = async ({ request }) => {
         productTitle: v.productTitle || "",
         productImage: v.productImage || null,
         variantTitle: v.variantTitle || "",
+        variantSku: v.variantSku || "",
         basePrice: v.basePrice || "0",
         availableForSale: v.availableForSale !== false,
         sortOrder: i,
@@ -391,6 +392,7 @@ export default function NewStorefront() {
             productTitle: product.title,
             productImage: product.image || null,
             variantTitle: variant.title,
+            variantSku: variant.sku || "",
             basePrice: variant.price,
             availableForSale: variant.availableForSale,
           },
@@ -420,6 +422,7 @@ export default function NewStorefront() {
             productTitle: product.title,
             productImage: product.image || null,
             variantTitle: variant.title,
+            variantSku: variant.sku || "",
             basePrice: variant.price,
             availableForSale: variant.availableForSale,
           });
