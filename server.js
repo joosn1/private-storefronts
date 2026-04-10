@@ -159,12 +159,13 @@ function buildStorefrontHtml(storefront, products, shop) {
         var btn=this;
         btn.textContent='Processing...';btn.disabled=true;
         try{
-          var cartLines=JSON.parse(localStorage.getItem('psf_cart_lines')||'[]');
+          var _ck='psf_cart_lines_'+_psfSlug;
+          var cartLines=JSON.parse(localStorage.getItem(_ck)||'[]');
           if(!cartLines.length){btn.textContent='Proceed to Checkout';btn.disabled=false;return;}
           var shopParam=_psfShop?'?shop='+encodeURIComponent(_psfShop):'';
           var r=await fetch('/apps/storefronts/'+_psfSlug+'/checkout'+shopParam,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({lines:cartLines.map(function(l){return{variantId:l.id,qty:l.qty,price:l.price,title:l.t};})})});
           var d=await r.json().catch(function(){return{};});
-          if(d.url){window.location.href=d.url;}else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
+          if(d.url){localStorage.removeItem(_ck);window.location.href=d.url;}else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
         }catch(e){alert('Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
       });
     })();
@@ -438,49 +439,80 @@ async function handleProxyCheckout(req, res) {
       draftInput.purchasingEntity = { customerId: storefront.shopifyCustomerId };
     }
 
-    // Create draft order via GraphQL Admin API so we can set originalUnitPrice per line item
-    const gqlRes = await fetch(
-      `https://${storefront.shopDomain}/admin/api/2025-10/graphql.json`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": session.accessToken,
-        },
-        body: JSON.stringify({
-          query: `
-            mutation CreateDraftOrder($input: DraftOrderInput!) {
-              draftOrderCreate(input: $input) {
-                draftOrder {
+    const apiBase = `https://${storefront.shopDomain}/admin/api/2025-10/graphql.json`;
+    const apiHeaders = {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": session.accessToken,
+    };
+
+    // Step 1: Create the draft order (required to set originalUnitPrice for custom pricing)
+    const createRes = await fetch(apiBase, {
+      method: "POST",
+      headers: apiHeaders,
+      body: JSON.stringify({
+        query: `
+          mutation CreateDraftOrder($input: DraftOrderInput!) {
+            draftOrderCreate(input: $input) {
+              draftOrder { id }
+              userErrors { field message }
+            }
+          }
+        `,
+        variables: { input: draftInput },
+      }),
+    });
+
+    const createData = await createRes.json();
+    const createErrors = createData?.data?.draftOrderCreate?.userErrors;
+    if (createErrors?.length) {
+      console.error("Draft order userErrors:", JSON.stringify(createErrors));
+      return res.status(500).json({ error: "Could not create order. Please try again." });
+    }
+
+    const draftOrderId = createData?.data?.draftOrderCreate?.draftOrder?.id;
+    if (!draftOrderId) {
+      console.error("Draft order creation failed:", JSON.stringify(createData));
+      return res.status(500).json({ error: "Could not create order. Please try again." });
+    }
+
+    // Step 2: Complete the draft order immediately → creates a live Shopify order
+    // paymentPending: true marks it as payment pending (standard B2B flow)
+    const completeRes = await fetch(apiBase, {
+      method: "POST",
+      headers: apiHeaders,
+      body: JSON.stringify({
+        query: `
+          mutation CompleteDraftOrder($id: ID!) {
+            draftOrderComplete(id: $id, paymentPending: true) {
+              draftOrder {
+                order {
                   id
-                  invoiceUrl
-                }
-                userErrors {
-                  field
-                  message
+                  name
+                  statusUrl
                 }
               }
+              userErrors { field message }
             }
-          `,
-          variables: { input: draftInput },
-        }),
-      }
-    );
+          }
+        `,
+        variables: { id: draftOrderId },
+      }),
+    });
 
-    const gqlData = await gqlRes.json();
-    const userErrors = gqlData?.data?.draftOrderCreate?.userErrors;
-    if (userErrors?.length) {
-      console.error("Draft order userErrors:", JSON.stringify(userErrors));
-      return res.status(500).json({ error: "Could not create order. Please try again." });
+    const completeData = await completeRes.json();
+    const completeErrors = completeData?.data?.draftOrderComplete?.userErrors;
+    if (completeErrors?.length) {
+      console.error("Draft order complete userErrors:", JSON.stringify(completeErrors));
+      return res.status(500).json({ error: "Could not complete order. Please try again." });
     }
 
-    const invoiceUrl = gqlData?.data?.draftOrderCreate?.draftOrder?.invoiceUrl;
-    if (!invoiceUrl) {
-      console.error("Draft order creation failed:", JSON.stringify(gqlData));
-      return res.status(500).json({ error: "Could not create order. Please try again." });
+    const order = completeData?.data?.draftOrderComplete?.draftOrder?.order;
+    if (!order) {
+      console.error("Draft order complete failed:", JSON.stringify(completeData));
+      return res.status(500).json({ error: "Could not complete order. Please try again." });
     }
 
-    res.json({ url: invoiceUrl });
+    res.json({ url: order.statusUrl, orderName: order.name });
   } catch (err) {
     console.error("Checkout error:", err);
     res.status(500).json({ error: "Server error" });
