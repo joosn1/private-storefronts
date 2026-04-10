@@ -398,9 +398,32 @@ async function handleProxyCheckout(req, res) {
       }
     }
 
-    // Build line items using GraphQL format.
-    // originalUnitPrice sets the actual price on the line item (not a discount),
-    // which is the only correct way to apply custom pricing via variant-based line items.
+    // Check whether any cart item has a custom price set
+    const hasCustomPrices = lines.some((l) => {
+      const p = priceMap[l.variantId];
+      return p && p.custom !== null;
+    });
+
+    // ── Path A: No custom prices → native Shopify checkout via cart permalink ──
+    // No draft order created; a live order is generated the moment the customer pays.
+    if (!hasCustomPrices) {
+      const cartSegment = lines
+        .filter((l) => l.variantId)
+        .map((l) => {
+          const numericId = String(l.variantId).split("/").pop();
+          const qty = Math.max(1, parseInt(l.qty, 10) || 1);
+          return `${numericId}:${qty}`;
+        })
+        .join(",");
+
+      if (!cartSegment) return res.status(400).json({ error: "No valid line items" });
+
+      return res.json({ url: `https://${storefront.shopDomain}/cart/${cartSegment}` });
+    }
+
+    // ── Path B: Custom prices → draft order → Shopify checkout via invoiceUrl ──
+    // Draft order is required to set per-line originalUnitPrice.
+    // Shopify converts it to a live order automatically when the customer pays.
     const lineItems = lines
       .filter((l) => l.variantId)
       .map((l) => {
@@ -446,9 +469,6 @@ async function handleProxyCheckout(req, res) {
       "X-Shopify-Access-Token": session.accessToken,
     };
 
-    // Create draft order with custom pricing, then send customer to invoiceUrl
-    // which is the real Shopify checkout page. When the customer pays, Shopify
-    // automatically converts the draft order into a live order.
     const createRes = await fetch(apiBase, {
       method: "POST",
       headers: apiHeaders,
