@@ -78,6 +78,7 @@ export const action = async ({ request, params }) => {
     const { data } = await response.json();
 
     let synced = 0;
+    const syncedPrices = {};
     for (let i = 0; i < products.length; i++) {
       const raw = data?.[`v${i}`]?.metafield?.value;
       if (raw == null) continue;
@@ -98,10 +99,11 @@ export const action = async ({ request, params }) => {
         where: { id: products[i].id },
         data: { customPrice: num.toFixed(2) },
       });
+      syncedPrices[products[i].shopifyVariantId] = num.toFixed(2);
       synced++;
     }
 
-    return { synced };
+    return { synced, prices: syncedPrices };
   }
 
   const {
@@ -437,6 +439,20 @@ export default function EditStorefront() {
       shopify.toast.show(saveFetcher.data.error, { isError: true });
     }
   }, [saveFetcher.data, shopify]);
+
+  // When sync completes, patch form state so saving preserves the synced prices
+  useEffect(() => {
+    const prices = syncFetcher.data?.prices;
+    if (!prices) return;
+    setForm((prev) => ({
+      ...prev,
+      selectedVariants: prev.selectedVariants.map((v) =>
+        prices[v.variantId] != null
+          ? { ...v, customPrice: prices[v.variantId] }
+          : v,
+      ),
+    }));
+  }, [syncFetcher.data]);
 
   const updateForm = useCallback((key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
