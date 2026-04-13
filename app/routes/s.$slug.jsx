@@ -111,16 +111,14 @@ export const action = async ({ request, params }) => {
     storefront.products.map((p) => [p.shopifyVariantId, p]),
   );
 
-  // Fetch live metafield prices if the storefront has a metafield configured
-  let metafieldPrices = new Map();
-  if (storefront.priceMetafield) {
-    const variantIds = items.map((i) => i.variantId);
-    metafieldPrices = await fetchVariantPricesFromMetafield(
-      storefront.shopDomain,
-      variantIds,
-      storefront.priceMetafield,
-    );
-  }
+  // Fetch live metafield prices — default to custom.private_storefront_price if not configured
+  const priceMetafield = storefront.priceMetafield || "custom.private_storefront_price";
+  const variantIds = items.map((i) => i.variantId);
+  const metafieldPrices = await fetchVariantPricesFromMetafield(
+    storefront.shopDomain,
+    variantIds,
+    priceMetafield,
+  );
 
   // Resolve the effective price for each item:
   // metafield price takes precedence over stored customPrice
