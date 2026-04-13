@@ -116,8 +116,20 @@ export async function fetchVariantPricesFromMetafield(shopDomain, variantIds, me
     const prices = new Map();
     variantIds.forEach((id, i) => {
       const val = data?.[`v${i}`]?.metafield?.value;
-      if (val != null && !isNaN(parseFloat(val))) {
-        prices.set(id, parseFloat(val).toFixed(2));
+      if (val == null) return;
+
+      // Shopify money metafields are JSON: {"amount":"500.00","currency_code":"USD"}
+      let amount;
+      try {
+        const parsed = JSON.parse(val);
+        amount = parsed?.amount ?? parsed;
+      } catch {
+        amount = val;
+      }
+
+      const num = parseFloat(amount);
+      if (!isNaN(num)) {
+        prices.set(id, num.toFixed(2));
       }
     });
     return prices;
