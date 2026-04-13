@@ -47,13 +47,61 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   let body;
   try {
     body = await request.json();
   } catch {
     return { error: "Invalid request body" };
+  }
+
+  // ── Sync prices from metafield ──────────────────────────────────────────────
+  if (body._action === "sync_prices") {
+    const storefront = await prisma.storefront.findFirst({
+      where: { id: params.id, shopDomain: session.shop },
+      include: { products: true },
+    });
+    if (!storefront) return { error: "Storefront not found" };
+
+    const products = storefront.products;
+    if (!products.length) return { synced: 0 };
+
+    // Build batched GraphQL query — one alias per variant
+    const aliases = products
+      .map((p, i) =>
+        `v${i}: productVariant(id: "${p.shopifyVariantId}") { metafield(namespace: "custom", key: "private_storefront_price") { value } }`
+      )
+      .join("\n");
+
+    const response = await admin.graphql(`#graphql\nquery { ${aliases} }`);
+    const { data } = await response.json();
+
+    let synced = 0;
+    for (let i = 0; i < products.length; i++) {
+      const raw = data?.[`v${i}`]?.metafield?.value;
+      if (raw == null) continue;
+
+      // Parse Shopify money JSON: {"amount":"500.00","currency_code":"USD"}
+      let amount;
+      try {
+        const parsed = JSON.parse(raw);
+        amount = parsed?.amount ?? raw;
+      } catch {
+        amount = raw;
+      }
+
+      const num = parseFloat(amount);
+      if (isNaN(num)) continue;
+
+      await prisma.storefrontProduct.update({
+        where: { id: products[i].id },
+        data: { customPrice: num.toFixed(2) },
+      });
+      synced++;
+    }
+
+    return { synced };
   }
 
   const {
@@ -210,6 +258,7 @@ export default function EditStorefront() {
   const skuFetcher = useFetcher();
   const customerFetcher = useFetcher();
   const companyFetcher = useFetcher();
+  const syncFetcher = useFetcher();
 
   const [step, setStep] = useState(0);
   const [stepError, setStepError] = useState("");
@@ -817,6 +866,33 @@ export default function EditStorefront() {
       {step === 2 && (
         <s-section heading="Select Products">
           <s-stack direction="block" gap="base">
+
+            {/* ── Sync prices from metafield ── */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", background: "#f1f8f5", border: "1px solid #b5e0ca", borderRadius: "6px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: "#202223" }}>Sync prices from Shopify</div>
+                <div style={{ fontSize: "13px", color: "#6d7175" }}>
+                  Pulls the <code>custom.private_storefront_price</code> metafield value for every product in this storefront and saves it as the custom price.
+                </div>
+                {syncFetcher.data?.synced != null && (
+                  <div style={{ fontSize: "13px", color: "#2a7a55", marginTop: "4px" }}>
+                    ✓ Synced prices for {syncFetcher.data.synced} variant{syncFetcher.data.synced !== 1 ? "s" : ""}
+                  </div>
+                )}
+                {syncFetcher.data?.error && (
+                  <div style={{ fontSize: "13px", color: "#d72c0d", marginTop: "4px" }}>
+                    Error: {syncFetcher.data.error}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => syncFetcher.submit({ _action: "sync_prices" }, { method: "post", encType: "application/json" })}
+                disabled={syncFetcher.state !== "idle"}
+                style={{ padding: "8px 16px", background: "#008060", color: "white", border: "none", borderRadius: "5px", fontSize: "13px", fontWeight: 600, cursor: syncFetcher.state !== "idle" ? "not-allowed" : "pointer", opacity: syncFetcher.state !== "idle" ? 0.7 : 1, whiteSpace: "nowrap" }}
+              >
+                {syncFetcher.state !== "idle" ? "Syncing…" : "Sync Prices"}
+              </button>
+            </div>
 
             {/* ── Bulk SKU Import ── */}
             <s-box padding="base" borderWidth="base" borderRadius="base">
