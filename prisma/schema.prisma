@@ -45,6 +45,7 @@ model Storefront {
   shopifyCompanyId         String?
   shopifyCompanyLocationId String?
   shopifyCompanyContactId  String?
+  priceMetafield           String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

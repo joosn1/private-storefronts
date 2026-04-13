@@ -60,7 +60,7 @@ export const action = async ({ request, params }) => {
     name, companyName, slug, primaryColor, logoUrl, isActive,
     passwordEnabled, password, requireLogin, selectedVariants,
     shopifyCustomerId, shopifyCompanyId, shopifyCompanyLocationId,
-    shopifyCompanyContactId,
+    shopifyCompanyContactId, priceMetafield,
   } = body;
 
   if (!name?.trim()) return { error: "Storefront name is required" };
@@ -111,6 +111,7 @@ export const action = async ({ request, params }) => {
       shopifyCompanyId: shopifyCompanyId || null,
       shopifyCompanyLocationId: shopifyCompanyLocationId || null,
       shopifyCompanyContactId: shopifyCompanyContactId || null,
+      priceMetafield: priceMetafield?.trim() || null,
     },
   });
 
@@ -242,6 +243,7 @@ export default function EditStorefront() {
       basePrice: p.basePrice || "0",
       availableForSale: p.availableForSale !== false,
     })),
+    priceMetafield: storefront.priceMetafield || "custom.private_storefront_price",
   });
 
   const [products, setProducts] = useState([]);
@@ -634,6 +636,20 @@ export default function EditStorefront() {
               onChange={(e) => updateForm("logoUrl", e.target.value)}
               placeholder="https://example.com/logo.png (optional)"
             />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <label style={labelStyle}>Custom Price Metafield (optional)</label>
+              <p style={{ margin: "0 0 6px", fontSize: "13px", color: "#6d7175" }}>
+                Enter a metafield in <strong>namespace.key</strong> format (e.g. <code>custom.b2b_price</code>).
+                At checkout, the variant's metafield value will be used as the price instead of the listed price.
+              </p>
+              <input
+                type="text"
+                value={form.priceMetafield}
+                onChange={(e) => updateForm("priceMetafield", e.target.value)}
+                placeholder="custom.b2b_price (optional)"
+                style={inputStyle}
+              />
+            </div>
             <Toggle
               label="Active"
               checked={form.isActive}

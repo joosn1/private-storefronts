@@ -6,7 +6,7 @@ import {
   passwordCookieName,
   customerCookieName,
 } from "../utils/session.server";
-import { createDraftOrder } from "../utils/admin-api.server";
+import { createDraftOrder, fetchVariantPricesFromMetafield } from "../utils/admin-api.server";
 import { createCartWithLines } from "../utils/storefront-api.server";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -111,21 +111,35 @@ export const action = async ({ request, params }) => {
     storefront.products.map((p) => [p.shopifyVariantId, p]),
   );
 
-  // If any item has a custom price, the entire order must be a draft order
-  const hasCustomPrice = items.some((item) => {
+  // Fetch live metafield prices if the storefront has a metafield configured
+  let metafieldPrices = new Map();
+  if (storefront.priceMetafield) {
+    const variantIds = items.map((i) => i.variantId);
+    metafieldPrices = await fetchVariantPricesFromMetafield(
+      storefront.shopDomain,
+      variantIds,
+      storefront.priceMetafield,
+    );
+  }
+
+  // Resolve the effective price for each item:
+  // metafield price takes precedence over stored customPrice
+  function getEffectivePrice(item) {
+    if (metafieldPrices.has(item.variantId)) return metafieldPrices.get(item.variantId);
     const p = variantMap.get(item.variantId);
-    return p?.customPrice != null;
-  });
+    return p?.customPrice != null ? p.customPrice.toString() : null;
+  }
+
+  // If any item has a custom price, the entire order must be a draft order
+  const hasCustomPrice = items.some((item) => getEffectivePrice(item) != null);
 
   if (hasCustomPrice) {
     const lineItems = items.map((item) => {
-      const p = variantMap.get(item.variantId);
+      const price = getEffectivePrice(item);
       return {
         variantId: item.variantId,
         quantity: item.quantity,
-        ...(p?.customPrice != null
-          ? { originalUnitPrice: p.customPrice.toString() }
-          : {}),
+        ...(price != null ? { originalUnitPrice: price } : {}),
       };
     });
 
