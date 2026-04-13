@@ -401,7 +401,7 @@ export default function NewStorefront() {
           {
             productId: product.id,
             variantId: variant.id,
-            customPrice: "",
+            customPrice: variant.storefrontPrice || "",
             productTitle: product.title,
             productImage: product.image || null,
             variantTitle: variant.title,
@@ -431,7 +431,7 @@ export default function NewStorefront() {
           toAdd.push({
             productId: product.id,
             variantId: variant.id,
-            customPrice: "",
+            customPrice: variant.storefrontPrice || "",
             productTitle: product.title,
             productImage: product.image || null,
             variantTitle: variant.title,
@@ -480,7 +480,7 @@ export default function NewStorefront() {
         toAdd.push({
           productId: v.productId,
           variantId: v.variantId,
-          customPrice: "",
+          customPrice: v.storefrontPrice || "",
           productTitle: v.productTitle,
           productImage: v.productImage || null,
           variantTitle: v.variantTitle || "",

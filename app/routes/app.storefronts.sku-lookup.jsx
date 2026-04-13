@@ -49,6 +49,9 @@ export const action = async ({ request }) => {
                 title
                 price
                 availableForSale
+                metafield(namespace: "custom", key: "private_storefront_price") {
+                  value
+                }
                 product {
                   id
                   title
@@ -70,6 +73,16 @@ export const action = async ({ request }) => {
       // Skip archived/draft products
       if (node.product.status !== "ACTIVE") continue;
       matchedSkus.add(node.sku);
+      const rawMetafield = node.metafield?.value ?? null;
+      let storefrontPrice = null;
+      if (rawMetafield) {
+        try {
+          const p = JSON.parse(rawMetafield);
+          storefrontPrice = p?.amount ?? rawMetafield;
+        } catch {
+          storefrontPrice = rawMetafield;
+        }
+      }
       found.push({
         variantId: node.id,
         sku: node.sku,
@@ -80,6 +93,7 @@ export const action = async ({ request }) => {
         productId: node.product.id,
         productTitle: node.product.title,
         productImage: node.product.featuredImage?.url || null,
+        storefrontPrice,
       });
     }
   }

@@ -6,7 +6,7 @@ import {
   passwordCookieName,
   customerCookieName,
 } from "../utils/session.server";
-import { createDraftOrder, fetchVariantPricesFromMetafield } from "../utils/admin-api.server";
+import { createDraftOrder } from "../utils/admin-api.server";
 import { createCartWithLines } from "../utils/storefront-api.server";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -111,33 +111,19 @@ export const action = async ({ request, params }) => {
     storefront.products.map((p) => [p.shopifyVariantId, p]),
   );
 
-  // Fetch live metafield prices — default to custom.private_storefront_price if not configured
-  const priceMetafield = storefront.priceMetafield || "custom.private_storefront_price";
-  const variantIds = items.map((i) => i.variantId);
-  const metafieldPrices = await fetchVariantPricesFromMetafield(
-    storefront.shopDomain,
-    variantIds,
-    priceMetafield,
-  );
-
-  // Resolve the effective price for each item:
-  // metafield price takes precedence over stored customPrice
-  function getEffectivePrice(item) {
-    if (metafieldPrices.has(item.variantId)) return metafieldPrices.get(item.variantId);
-    const p = variantMap.get(item.variantId);
-    return p?.customPrice != null ? p.customPrice.toString() : null;
-  }
-
   // If any item has a custom price, the entire order must be a draft order
-  const hasCustomPrice = items.some((item) => getEffectivePrice(item) != null);
+  const hasCustomPrice = items.some((item) => {
+    const p = variantMap.get(item.variantId);
+    return p?.customPrice != null;
+  });
 
   if (hasCustomPrice) {
     const lineItems = items.map((item) => {
-      const price = getEffectivePrice(item);
+      const p = variantMap.get(item.variantId);
       return {
         variantId: item.variantId,
         quantity: item.quantity,
-        ...(price != null ? { originalUnitPrice: price } : {}),
+        ...(p?.customPrice != null ? { originalUnitPrice: p.customPrice.toString() } : {}),
       };
     });
 

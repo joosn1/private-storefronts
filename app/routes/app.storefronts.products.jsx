@@ -43,6 +43,9 @@ export const loader = async ({ request }) => {
                     sku
                     price
                     availableForSale
+                    metafield(namespace: "custom", key: "private_storefront_price") {
+                      value
+                    }
                   }
                 }
               }
@@ -75,6 +78,9 @@ export const loader = async ({ request }) => {
       sku: ve.node.sku || "",
       price: ve.node.price,
       availableForSale: ve.node.availableForSale,
+      storefrontPrice: ve.node.metafield?.value
+        ? (() => { try { const p = JSON.parse(ve.node.metafield.value); return p?.amount ?? ve.node.metafield.value; } catch { return ve.node.metafield.value; } })()
+        : null,
     })),
   }));
 
