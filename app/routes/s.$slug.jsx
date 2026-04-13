@@ -120,10 +120,25 @@ export const action = async ({ request, params }) => {
   if (hasCustomPrice) {
     const lineItems = items.map((item) => {
       const p = variantMap.get(item.variantId);
+      if (p?.customPrice != null) {
+        // Custom line item — variantId is intentionally omitted so Shopify
+        // always uses originalUnitPrice instead of the catalog price.
+        const title = p.variantTitle && p.variantTitle !== "Default Title"
+          ? `${p.productTitle} — ${p.variantTitle}`
+          : p.productTitle;
+        return {
+          title,
+          originalUnitPrice: p.customPrice.toString(),
+          quantity: item.quantity,
+          ...(p.variantSku ? { sku: p.variantSku } : {}),
+          requiresShipping: true,
+          taxable: true,
+        };
+      }
+      // No custom price — use the real variant so inventory is tracked
       return {
         variantId: item.variantId,
         quantity: item.quantity,
-        ...(p?.customPrice != null ? { originalUnitPrice: p.customPrice.toString() } : {}),
       };
     });
 
