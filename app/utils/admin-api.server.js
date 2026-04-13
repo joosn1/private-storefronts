@@ -33,57 +33,73 @@ async function adminGraphQL(shopDomain, query, variables = {}) {
   return res.json();
 }
 
-const DRAFT_ORDER_CREATE_MUTATION = `
-  mutation draftOrderCreate($input: DraftOrderInput!) {
-    draftOrderCreate(input: $input) {
-      draftOrder {
-        id
-        invoiceUrl
-      }
-      userErrors {
-        field
-        message
-      }
-    }
-  }
-`;
-
 /**
- * Create a Shopify draft order with custom line item prices.
- * lineItems: [{ variantId, quantity, originalUnitPrice? }]
+ * Create a Shopify draft order via the REST Admin API.
+ * Using REST because the GraphQL API's originalUnitPrice is unreliable
+ * for overriding variant catalog prices. The REST `price` field is explicit.
+ *
+ * lineItems: [
+ *   { variantId, quantity }                          — variant item (no custom price)
+ *   { title, originalUnitPrice, quantity, sku? }     — custom-priced item (no variantId)
+ * ]
  * Returns { invoiceUrl, id } on success, { error } on failure.
  */
 export async function createDraftOrder(shopDomain, { lineItems, email, note } = {}) {
   try {
-    const { data, errors } = await adminGraphQL(
-      shopDomain,
-      DRAFT_ORDER_CREATE_MUTATION,
+    const token = await getAccessToken(shopDomain);
+
+    const restLineItems = lineItems.map((item) => {
+      if (item.variantId) {
+        // Variant item — extract numeric ID from GID (gid://shopify/ProductVariant/12345678)
+        const numericId = parseInt(item.variantId.split("/").pop(), 10);
+        return { variant_id: numericId, quantity: item.quantity };
+      }
+      // Custom-priced item — REST `price` field is always used as-is by Shopify
+      return {
+        title: item.title || "Custom Item",
+        price: item.originalUnitPrice,
+        quantity: item.quantity,
+        ...(item.sku ? { sku: item.sku } : {}),
+        requires_shipping: item.requiresShipping !== false,
+        taxable: item.taxable !== false,
+      };
+    });
+
+    const payload = {
+      draft_order: {
+        line_items: restLineItems,
+        ...(email ? { email } : {}),
+        ...(note ? { note } : {}),
+      },
+    };
+
+    const res = await fetch(
+      `https://${shopDomain}/admin/api/${ADMIN_API_VERSION}/draft_orders.json`,
       {
-        input: {
-          lineItems,
-          ...(email ? { email } : {}),
-          ...(note ? { note } : {}),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
         },
+        body: JSON.stringify(payload),
       },
     );
 
-    if (errors?.length) {
-      console.error("Draft order GraphQL errors:", errors);
-      return { error: errors[0].message };
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Draft order REST error:", res.status, errText);
+      return { error: "Failed to create order. Please try again." };
     }
 
-    const userErrors = data?.draftOrderCreate?.userErrors;
-    if (userErrors?.length) {
-      console.error("Draft order user errors:", userErrors);
-      return { error: userErrors[0].message };
-    }
+    const json = await res.json();
+    const draftOrder = json?.draft_order;
 
-    const draftOrder = data?.draftOrderCreate?.draftOrder;
-    if (!draftOrder?.invoiceUrl) {
+    if (!draftOrder?.invoice_url) {
+      console.error("No invoice_url in draft order response:", JSON.stringify(json));
       return { error: "Draft order created but no invoice URL returned" };
     }
 
-    return { invoiceUrl: draftOrder.invoiceUrl, id: draftOrder.id };
+    return { invoiceUrl: draftOrder.invoice_url, id: draftOrder.id };
   } catch (err) {
     console.error("createDraftOrder error:", err);
     return { error: "Failed to create order. Please try again." };

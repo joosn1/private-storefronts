@@ -128,7 +128,7 @@ export const action = async ({ request, params }) => {
           : p.productTitle;
         return {
           title,
-          originalUnitPrice: p.customPrice.toString(),
+          originalUnitPrice: p.customPrice.toFixed(2),
           quantity: item.quantity,
           ...(p.variantSku ? { sku: p.variantSku } : {}),
           requiresShipping: true,
