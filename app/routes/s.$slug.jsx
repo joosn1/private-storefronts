@@ -6,7 +6,7 @@ import {
   passwordCookieName,
   customerCookieName,
 } from "../utils/session.server";
-import { createDraftOrder } from "../utils/admin-api.server";
+import { createCartWithLines } from "../utils/storefront-api.server";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -95,54 +95,24 @@ export const action = async ({ request, params }) => {
   }
 
   if (body._action !== "checkout") return { error: "Unknown action" };
-  console.log("[checkout] action triggered, items:", JSON.stringify(body.items));
 
   const { items } = body; // [{ variantId, quantity }]
   if (!items?.length) return { error: "Cart is empty" };
 
   const storefront = await prisma.storefront.findUnique({
     where: { slug },
-    include: { products: true },
   });
 
   if (!storefront) return { error: "Storefront not found" };
 
-  const variantMap = new Map(
-    storefront.products.map((p) => [p.shopifyVariantId, p]),
-  );
+  const lines = items.map((item) => ({
+    merchandiseId: item.variantId,
+    quantity: item.quantity,
+  }));
 
-  // All orders are created as draft orders so custom pricing is always honoured
-  // and the merchant can review before fulfilment.
-  const lineItems = items.map((item) => {
-    const p = variantMap.get(item.variantId);
-    if (p?.customPrice != null) {
-      // Custom-priced item — send as a custom line item with explicit price.
-      // variantId is intentionally omitted: Shopify always uses `price` on
-      // custom line items with no catalog-price conflict.
-      const title = p.variantTitle && p.variantTitle !== "Default Title"
-        ? `${p.productTitle} — ${p.variantTitle}`
-        : p.productTitle;
-      return {
-        title,
-        originalUnitPrice: p.customPrice.toFixed(2),
-        quantity: item.quantity,
-        ...(p.variantSku ? { sku: p.variantSku } : {}),
-        requiresShipping: true,
-        taxable: true,
-      };
-    }
-    // No custom price — link to the real variant for inventory tracking
-    return {
-      variantId: item.variantId,
-      quantity: item.quantity,
-    };
-  });
-
-  console.log("[checkout] lineItems to draft order:", JSON.stringify(lineItems));
-  const result = await createDraftOrder(storefront.shopDomain, { lineItems });
-  console.log("[checkout] draft order result:", JSON.stringify(result));
-  if (result.error) return { error: result.error };
-  return { checkoutUrl: result.invoiceUrl };
+  const cart = await createCartWithLines(storefront.shopDomain, lines);
+  if (!cart) return { error: "Failed to create checkout. Please try again." };
+  return { checkoutUrl: cart.checkoutUrl };
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
