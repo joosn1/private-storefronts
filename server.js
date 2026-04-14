@@ -112,9 +112,13 @@ function buildStorefrontHtml(storefront, products, shop, authToken) {
   <div style="padding:1rem;">
     <h3 style="margin:0 0 .5rem;font-size:1rem;font-weight:600;">${esc(product.title)}</h3>
     ${multi ? `<select class="variant-select" data-product-id="${esc(product.id)}" style="width:100%;padding:.5rem;margin-bottom:.75rem;border:1px solid #ddd;border-radius:4px;font-size:.875rem;">${variantOpts}</select>` : first ? `<div data-variant-id="${esc(first.id)}" data-price="${esc(first.price)}" data-currency="${esc(first.currencyCode)}" data-available="${first.availableForSale}" style="margin-bottom:.75rem;"></div>` : ""}
-    <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div style="margin-bottom:.75rem;">
       <span class="product-price" style="font-weight:700;font-size:1.125rem;">${first ? fmtPrice(first.price, first.currencyCode) : "—"}</span>
-      <button class="add-to-cart-btn" data-product-id="${esc(product.id)}" data-variant-id="${esc(first?.id || "")}" data-variant-title="${esc(product.variants.length === 1 ? first?.title || "" : "")}" ${!first?.availableForSale ? "disabled" : ""} style="padding:.625rem 1.25rem;background:${first?.availableForSale ? accent : "#ccc"};color:${first?.availableForSale ? contrast : "#666"};border:none;border-radius:6px;font-size:.875rem;font-weight:600;cursor:${first?.availableForSale ? "pointer" : "not-allowed"};">
+    </div>
+    <div style="display:flex;align-items:center;gap:.5rem;">
+      <label style="font-size:.8rem;font-weight:600;color:#555;white-space:nowrap;">Qty:</label>
+      <input class="qty-input" type="number" value="1" min="1" style="width:64px;padding:.5rem .4rem;border:1px solid #ddd;border-radius:6px;font-size:.9rem;text-align:center;">
+      <button class="add-to-cart-btn" data-product-id="${esc(product.id)}" data-variant-id="${esc(first?.id || "")}" data-variant-title="${esc(product.variants.length === 1 ? first?.title || "" : "")}" ${!first?.availableForSale ? "disabled" : ""} style="flex:1;padding:.625rem .75rem;background:${first?.availableForSale ? accent : "#ccc"};color:${first?.availableForSale ? contrast : "#666"};border:none;border-radius:6px;font-size:.875rem;font-weight:600;cursor:${first?.availableForSale ? "pointer" : "not-allowed"};">
         ${first?.availableForSale ? "Add to Cart" : "Sold Out"}
       </button>
     </div>
@@ -342,15 +346,16 @@ function buildCartScript(accentColor) {
     if(te)te.textContent=fmtCur(tot,'USD');
     localStorage.setItem(_cartKey,JSON.stringify(lines));
   }
-  async function addToCart(vid,vt,title,price,cur){
+  async function addToCart(vid,vt,title,price,cur,qty){
     var id=numId(vid);
+    qty=Math.max(1,parseInt(qty,10)||1);
     if(!id){alert('Invalid product variant.');return;}
     try{
-      var r=await fetch('/cart/add.js',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({items:[{id:id,quantity:1}]})});
+      var r=await fetch('/cart/add.js',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({items:[{id:id,quantity:qty}]})});
       if(!r.ok){var e=await r.json().catch(function(){return{};});alert(e.description||'Could not add to cart.');return;}
     }catch(err){alert('Could not add to cart.');return;}
     var ex=lines.find(function(l){return l.id===vid;});
-    if(ex){ex.qty++;}else{lines.push({id:vid,t:title,vt:vt,price:parseFloat(price),qty:1,cur:cur});}
+    if(ex){ex.qty+=qty;}else{lines.push({id:vid,t:title,vt:vt,price:parseFloat(price),qty:qty,cur:cur});}
     updateUI();
     document.getElementById('cart-panel').style.display='block';
   }
@@ -365,8 +370,13 @@ function buildCartScript(accentColor) {
     });
     document.querySelectorAll('.add-to-cart-btn').forEach(function(btn){
       btn.addEventListener('click',function(){
-        var vid=this.dataset.variantId,vt=this.dataset.variantTitle||'',card=this.closest('.product-card'),title=card&&card.querySelector('h3')?card.querySelector('h3').textContent:'Product',pt=card&&card.querySelector('.product-price')?card.querySelector('.product-price').textContent:'0',price=pt.replace(/[^0-9.]/g,'');
-        if(vid)addToCart(vid,vt,title,price,'USD');
+        var vid=this.dataset.variantId,vt=this.dataset.variantTitle||'',card=this.closest('.product-card');
+        var title=card&&card.querySelector('h3')?card.querySelector('h3').textContent:'Product';
+        var pt=card&&card.querySelector('.product-price')?card.querySelector('.product-price').textContent:'0';
+        var price=pt.replace(/[^0-9.]/g,'');
+        var qtyInput=card&&card.querySelector('.qty-input');
+        var qty=qtyInput?Math.max(1,parseInt(qtyInput.value,10)||1):1;
+        if(vid)addToCart(vid,vt,title,price,'USD',qty);
       });
     });
   }
