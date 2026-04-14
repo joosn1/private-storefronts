@@ -4,7 +4,6 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { hashStorefrontPassword } from "../utils/session.server";
 
 // ─── Server ──────────────────────────────────────────────────────────────────
 
@@ -48,7 +47,7 @@ export const action = async ({ request }) => {
   // Hash password if provided
   let hashedPassword = null;
   if (passwordEnabled && password?.trim()) {
-    hashedPassword = hashStorefrontPassword(password.trim());
+    hashedPassword = password.trim(); // stored as plain text — shared access code, not a personal password
   }
 
   // Create storefront

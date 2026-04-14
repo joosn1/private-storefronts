@@ -1,51 +1,69 @@
 import { redirect } from "react-router";
-import { useActionData, useLoaderData, Form } from "react-router";
+import { useLoaderData } from "react-router";
 import prisma from "../db.server";
 import {
   getSessionCookie,
   buildSetCookieHeader,
   passwordCookieName,
-  hashStorefrontPassword,
   SESSION_MAX_AGE,
 } from "../utils/session.server";
 
 export const loader = async ({ request, params }) => {
   const { slug } = params;
+  const url = new URL(request.url);
+
+  // Already verified — send straight to the storefront
   const verified = getSessionCookie(request, passwordCookieName(slug));
   if (verified === "verified") return redirect(`/s/${slug}`);
-  return { slug };
+
+  // Error from a previous failed attempt (passed via query param)
+  const errorCode = url.searchParams.get("error");
+  const error =
+    errorCode === "wrong"
+      ? "Incorrect password. Please try again."
+      : errorCode === "empty"
+      ? "Please enter the password."
+      : null;
+
+  return { slug, error };
 };
 
+// The action ALWAYS returns a redirect — never an inline response.
+// This ensures the browser handles every response natively, including
+// the Set-Cookie header on success, without any React Router fetch
+// interception that could prevent the cookie from being stored.
 export const action = async ({ request, params }) => {
   const { slug } = params;
 
-  let password;
+  let password = "";
   try {
     const formData = await request.formData();
-    password = String(formData.get("password") || "");
+    password = String(formData.get("password") || "").trim();
   } catch {
-    return { error: "Could not read form data. Please try again." };
+    return redirect(`/s/${slug}/auth?error=wrong`);
   }
 
   if (!password) {
-    return { error: "Please enter the password." };
+    return redirect(`/s/${slug}/auth?error=empty`);
   }
 
   let storefront;
   try {
     storefront = await prisma.storefront.findUnique({ where: { slug } });
   } catch {
-    return { error: "Something went wrong. Please try again." };
+    return redirect(`/s/${slug}/auth?error=wrong`);
   }
 
+  // If no password is set on this storefront, let them through
   if (!storefront?.password) return redirect(`/s/${slug}`);
 
-  const valid = hashStorefrontPassword(password) === storefront.password;
-  if (!valid) {
-    return { error: "Incorrect password. Please try again." };
+  // Plain text comparison — storefront.password is the access code exactly
+  // as the merchant typed it when saving
+  if (password !== storefront.password.trim()) {
+    return redirect(`/s/${slug}/auth?error=wrong`);
   }
 
-  // Use a full redirect — the browser handles Set-Cookie natively
+  // Correct password — set a signed cookie and send to the storefront
   return redirect(`/s/${slug}`, {
     headers: {
       "Set-Cookie": buildSetCookieHeader(passwordCookieName(slug), "verified", {
@@ -56,9 +74,7 @@ export const action = async ({ request, params }) => {
 };
 
 export default function StorefrontAuth() {
-  const { slug } = useLoaderData();
-  const actionData = useActionData();
-  const error = actionData?.error;
+  const { slug, error } = useLoaderData();
 
   return (
     <div
@@ -87,25 +103,30 @@ export default function StorefrontAuth() {
           Enter the password to access this storefront.
         </p>
 
-        {/* Explicit action URL avoids any parent-route action confusion */}
-        <Form method="post" action={`/s/${slug}/auth`}>
-          {error && (
-            <div
-              style={{
-                background: "#fee2e2",
-                border: "1px solid #fca5a5",
-                color: "#b91c1c",
-                padding: "12px 16px",
-                borderRadius: 6,
-                marginBottom: 20,
-                fontSize: 14,
-                fontWeight: 500,
-              }}
-            >
-              {error}
-            </div>
-          )}
+        {error && (
+          <div
+            style={{
+              background: "#fee2e2",
+              border: "1px solid #fca5a5",
+              color: "#b91c1c",
+              padding: "12px 16px",
+              borderRadius: 6,
+              marginBottom: 20,
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            {error}
+          </div>
+        )}
 
+        {/*
+          Native <form> — NOT React Router's <Form>.
+          The browser handles the POST and the subsequent redirect
+          entirely on its own, so Set-Cookie is always applied before
+          the next request is made.
+        */}
+        <form method="post" action={`/s/${slug}/auth`}>
           <label
             style={{
               display: "block",
@@ -120,7 +141,6 @@ export default function StorefrontAuth() {
             type="password"
             name="password"
             autoFocus
-            required
             style={{
               width: "100%",
               padding: "10px 14px",
@@ -147,7 +167,7 @@ export default function StorefrontAuth() {
           >
             Enter Storefront
           </button>
-        </Form>
+        </form>
       </div>
     </div>
   );
