@@ -117,6 +117,69 @@ export async function createCartWithLines(shopDomain, lines) {
 }
 
 /**
+ * Authenticate a customer against Shopify's customer accounts via the Storefront API.
+ * Returns { email, customerId } on success, or { error: string } on failure.
+ */
+export async function authenticateCustomer(shopDomain, email, password) {
+  try {
+    const client = getClient(shopDomain);
+    const { data, errors } = await client.request(
+      `
+      mutation customerAccessTokenCreate($input: CustomerAccessTokenCreateInput!) {
+        customerAccessTokenCreate(input: $input) {
+          customerAccessToken {
+            accessToken
+          }
+          customerUserErrors {
+            code
+            message
+          }
+        }
+      }
+    `,
+      { variables: { input: { email, password } } },
+    );
+
+    if (errors) {
+      return { error: "Authentication error. Please try again." };
+    }
+
+    const userErrors = data?.customerAccessTokenCreate?.customerUserErrors;
+    if (userErrors?.length > 0) {
+      const code = userErrors[0].code;
+      if (code === "UNIDENTIFIED_CUSTOMER") {
+        return { error: "Invalid email or password." };
+      }
+      return { error: userErrors[0].message };
+    }
+
+    const token = data?.customerAccessTokenCreate?.customerAccessToken?.accessToken;
+    if (!token) return { error: "Authentication failed. Please try again." };
+
+    // Fetch the customer's ID using the access token
+    const { data: customerData } = await client.request(
+      `
+      query getCustomer($token: String!) {
+        customer(customerAccessToken: $token) {
+          id
+          email
+        }
+      }
+    `,
+      { variables: { token } },
+    );
+
+    const customer = customerData?.customer;
+    if (!customer) return { error: "Could not retrieve account details." };
+
+    return { customerId: customer.id, email: customer.email };
+  } catch (err) {
+    console.error("authenticateCustomer error:", err);
+    return { error: "Authentication error. Please try again." };
+  }
+}
+
+/**
  * Create a new Shopify cart via the Storefront API.
  * Returns { id, checkoutUrl } or null on failure.
  */

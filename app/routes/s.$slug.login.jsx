@@ -1,99 +1,84 @@
-import crypto from "crypto";
 import { redirect } from "react-router";
-import { Link, useLoaderData } from "react-router";
+import { useActionData, Form, useLoaderData } from "react-router";
 import prisma from "../db.server";
-import {
-  generatePKCE,
-  getShopNumericId,
-  buildAuthUrl,
-} from "../utils/customer-account.server";
+import { authenticateCustomer } from "../utils/storefront-api.server";
 import {
   getSessionCookie,
   buildSetCookieHeader,
   customerCookieName,
+  SESSION_MAX_AGE,
 } from "../utils/session.server";
-
-const ERROR_MESSAGES = {
-  not_authorized:
-    "Your Shopify account is not authorized to access this storefront. Please contact the store owner.",
-  auth_failed:
-    "Authentication failed. Please try again.",
-  no_email:
-    "Your Shopify account did not provide an email address. Please try again.",
-  state_mismatch:
-    "Your sign-in session expired. Please try again.",
-};
 
 export const loader = async ({ request, params }) => {
   const { slug } = params;
-  const url = new URL(request.url);
-  const errorCode = url.searchParams.get("error");
-
-  // Already authenticated — send straight to the storefront
+  // Already logged in?
   const customerId = getSessionCookie(request, customerCookieName(slug));
   if (customerId) return redirect(`/s/${slug}`);
 
-  // Return error data so the component can display it
-  if (errorCode) {
-    return {
-      error: ERROR_MESSAGES[errorCode] ?? "Authentication failed. Please try again.",
-      slug,
-    };
-  }
-
-  // Load storefront to get the shop domain
-  const storefront = await prisma.storefront.findUnique({ where: { slug } });
+  // Load storefront to get the shop domain (for the "forgot password" link)
+  const storefront = await prisma.storefront.findUnique({
+    where: { slug },
+    select: { shopDomain: true, name: true },
+  });
   if (!storefront) throw new Response("Not Found", { status: 404 });
 
-  // Build PKCE + nonce
-  const { verifier, challenge } = generatePKCE();
-  const nonce = crypto.randomBytes(16).toString("base64url");
-  const state = `${nonce}|${slug}`;
+  return { shopDomain: storefront.shopDomain, storefrontName: storefront.name };
+};
 
-  // Fetch the shop's numeric ID (needed for the Customer Account API URL)
-  let shopId;
-  try {
-    shopId = await getShopNumericId(storefront.shopDomain);
-  } catch (err) {
-    console.error("Failed to get shop ID for Customer Account OAuth:", err);
-    return {
-      error: "Unable to initiate sign-in right now. Please try again later.",
-      slug,
-    };
+export const action = async ({ request, params }) => {
+  const { slug } = params;
+  const formData = await request.formData();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+
+  if (!email || !password) {
+    return { error: "Email and password are required." };
   }
 
-  const redirectUri = `${process.env.SHOPIFY_APP_URL}/auth/shopify-customer`;
-
-  const authUrl = buildAuthUrl({
-    shopId,
-    clientId: process.env.SHOPIFY_API_KEY,
-    redirectUri,
-    challenge,
-    state,
+  const storefront = await prisma.storefront.findUnique({
+    where: { slug },
+    include: {
+      customers: {
+        where: { isActive: true },
+        select: { email: true },
+      },
+    },
   });
+  if (!storefront) throw new Response("Not Found", { status: 404 });
 
-  // Persist the verifier + nonce in a short-lived signed cookie so the
-  // callback route can verify the round-trip.
-  const oauthState = JSON.stringify({
-    verifier,
-    nonce,
-    shopId,
-    slug,
-    redirectUri,
-  });
+  // Authenticate against Shopify's customer accounts
+  const result = await authenticateCustomer(storefront.shopDomain, email, password);
+  if (result.error) {
+    return { error: result.error };
+  }
 
-  return redirect(authUrl, {
+  // If the storefront has a customer whitelist, enforce it
+  if (storefront.customers.length > 0) {
+    const allowed = storefront.customers.some(
+      (c) => c.email.toLowerCase() === email,
+    );
+    if (!allowed) {
+      return {
+        error:
+          "Your account is not authorized to access this storefront. Please contact the store owner.",
+      };
+    }
+  }
+
+  return redirect(`/s/${slug}`, {
     headers: {
-      "Set-Cookie": buildSetCookieHeader(`psf_oauth_${slug}`, oauthState, {
-        maxAge: 600, // 10 minutes
-      }),
+      "Set-Cookie": buildSetCookieHeader(
+        customerCookieName(slug),
+        result.customerId,
+        { maxAge: SESSION_MAX_AGE },
+      ),
     },
   });
 };
 
-// The component only renders when the loader returns an error (not a redirect).
 export default function StorefrontLogin() {
-  const data = useLoaderData();
+  const actionData = useActionData();
+  const { shopDomain } = useLoaderData();
 
   return (
     <div
@@ -112,38 +97,111 @@ export default function StorefrontLogin() {
           borderRadius: 10,
           boxShadow: "0 2px 16px rgba(0,0,0,.1)",
           width: "100%",
-          maxWidth: 420,
-          textAlign: "center",
+          maxWidth: 400,
         }}
       >
-        <h2 style={{ margin: "0 0 12px", fontSize: 22, fontWeight: 700 }}>
-          Sign In Required
+        <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 700 }}>
+          Sign In
         </h2>
-        <p
-          style={{
-            color: "#c00",
-            margin: "0 0 24px",
-            fontSize: 14,
-            lineHeight: 1.5,
-          }}
-        >
-          {data?.error}
+        <p style={{ color: "#666", margin: "0 0 24px", fontSize: 14 }}>
+          Sign in with your Shopify account to access this storefront.
         </p>
-        <Link
-          to={`/s/${data?.slug}/login`}
-          style={{
-            display: "inline-block",
-            padding: "12px 28px",
-            background: "#000",
-            color: "#fff",
-            borderRadius: 6,
-            fontSize: 15,
-            fontWeight: 600,
-            textDecoration: "none",
-          }}
-        >
-          Try Again
-        </Link>
+
+        <Form method="post">
+          {actionData?.error && (
+            <div
+              style={{
+                background: "#fee",
+                color: "#c00",
+                padding: "10px 14px",
+                borderRadius: 6,
+                marginBottom: 16,
+                fontSize: 14,
+              }}
+            >
+              {actionData.error}
+            </div>
+          )}
+
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            Email
+          </label>
+          <input
+            type="email"
+            name="email"
+            autoFocus
+            required
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              fontSize: 15,
+              boxSizing: "border-box",
+              marginBottom: 16,
+            }}
+          />
+
+          <label
+            style={{
+              display: "block",
+              marginBottom: 6,
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            Password
+          </label>
+          <input
+            type="password"
+            name="password"
+            required
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              border: "1px solid #ddd",
+              borderRadius: 6,
+              fontSize: 15,
+              boxSizing: "border-box",
+              marginBottom: 8,
+            }}
+          />
+
+          <div style={{ textAlign: "right", marginBottom: 20 }}>
+            <a
+              href={`https://${shopDomain}/account/recover`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 13, color: "#555", textDecoration: "none" }}
+            >
+              Forgot password / No account yet?
+            </a>
+          </div>
+
+          <button
+            type="submit"
+            style={{
+              width: "100%",
+              padding: "12px 20px",
+              background: "#000",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Sign In
+          </button>
+        </Form>
       </div>
     </div>
   );
