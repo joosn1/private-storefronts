@@ -519,14 +519,10 @@ async function handleProxyMain(req, res) {
     const cookieHeader = req.headers.cookie || "";
     const fakeRequest = { headers: { get: (h) => h === "cookie" ? cookieHeader : null } };
 
-    if (storefront.password && !storefront.requireLogin) {
+    // If the storefront has a password, anyone must enter it to get in — no whitelist needed
+    if (storefront.password) {
       const verified = getSessionCookie(fakeRequest, passwordCookieName(slug));
       if (!verified) return res.redirect(302, `${proxyBase}/auth`);
-    }
-
-    if (storefront.requireLogin) {
-      const customerId = getSessionCookie(fakeRequest, customerCookieName(slug));
-      if (!customerId) return res.redirect(302, `${proxyBase}/login`);
     }
 
     // Load products from DB (metadata cached at storefront configuration time — no API call needed)
