@@ -55,11 +55,16 @@ export const action = async ({ request, params }) => {
   }
 
   // If no password is set on this storefront, let them through
-  if (!storefront?.password) return redirect(`/s/${slug}`);
+  if (!storefront?.password) {
+    console.log(`[auth] ${slug}: no password set, allowing through`);
+    return redirect(`/s/${slug}`);
+  }
 
-  // Plain text comparison — storefront.password is the access code exactly
-  // as the merchant typed it when saving
-  if (password !== storefront.password.trim()) {
+  const stored = storefront.password.trim();
+  const match = password === stored;
+  console.log(`[auth] ${slug}: entered="${password}" stored="${stored}" match=${match}`);
+
+  if (!match) {
     return redirect(`/s/${slug}/auth?error=wrong`);
   }
 

@@ -242,6 +242,17 @@ export default function NewStorefront() {
 
   const isSaving = saveFetcher.state !== "idle";
 
+  // Navigate to dashboard after successful creation
+  useEffect(() => {
+    if (saveFetcher.data?.success) {
+      shopify.toast.show("Storefront created successfully!");
+      navigate("/app");
+    }
+    if (saveFetcher.data?.error) {
+      shopify.toast.show(saveFetcher.data.error, { isError: true });
+    }
+  }, [saveFetcher.data]);
+
   useEffect(() => {
     if (skuFetcher.data && skuFetcher.state === "idle") {
       setSkuResults(skuFetcher.data);
@@ -526,7 +537,7 @@ export default function NewStorefront() {
 
   // ── Customer helpers ──────────────────────────────────────────────────────
   function addCustomer() {
-    if (!newCustomer.email || !newCustomer.password) return;
+    if (!newCustomer.email) return;
     setForm((prev) => ({
       ...prev,
       customers: [...prev.customers, { ...newCustomer }],
@@ -843,14 +854,6 @@ export default function NewStorefront() {
                         value={newCustomer.name}
                         onChange={(e) => setNewCustomer((p) => ({ ...p, name: e.target.value }))}
                         placeholder="Full name"
-                        style={{ flex: 1 }}
-                      />
-                      <Field
-                        type="password"
-                        label="Password"
-                        value={newCustomer.password}
-                        onChange={(e) => setNewCustomer((p) => ({ ...p, password: e.target.value }))}
-                        placeholder="Customer password"
                         style={{ flex: 1 }}
                       />
                       <s-button variant="primary" onClick={addCustomer} style={{ alignSelf: "flex-end" }}>
