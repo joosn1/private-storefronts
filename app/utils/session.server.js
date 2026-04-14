@@ -116,3 +116,15 @@ export function customerCookieName(slug) {
 
 /** 30-day session expiry in seconds */
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
+
+/**
+ * Hash a storefront password using HMAC-SHA256 keyed with the session secret.
+ * Used for the simple shared storefront password (not customer accounts).
+ * Returns a deterministic hex string — compare with === to verify.
+ */
+export function hashStorefrontPassword(password) {
+  return crypto
+    .createHmac("sha256", getSecret())
+    .update(String(password))
+    .digest("hex");
+}

@@ -4,7 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import bcrypt from "bcryptjs";
+import { hashStorefrontPassword } from "../utils/session.server";
 
 // ─── Server ──────────────────────────────────────────────────────────────────
 
@@ -142,7 +142,7 @@ export const action = async ({ request, params }) => {
   if (!passwordEnabled) {
     hashedPassword = null;
   } else if (password?.trim()) {
-    hashedPassword = await bcrypt.hash(password.trim(), 12);
+    hashedPassword = hashStorefrontPassword(password.trim());
   }
 
   // Update storefront

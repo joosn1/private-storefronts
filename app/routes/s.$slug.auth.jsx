@@ -1,11 +1,11 @@
 import { redirect } from "react-router";
 import { useActionData, Form } from "react-router";
 import prisma from "../db.server";
-import bcrypt from "bcryptjs";
 import {
   getSessionCookie,
   buildSetCookieHeader,
   passwordCookieName,
+  hashStorefrontPassword,
   SESSION_MAX_AGE,
 } from "../utils/session.server";
 
@@ -24,7 +24,7 @@ export const action = async ({ request, params }) => {
   const storefront = await prisma.storefront.findUnique({ where: { slug } });
   if (!storefront?.password) return redirect(`/s/${slug}`);
 
-  const valid = await bcrypt.compare(password, storefront.password);
+  const valid = hashStorefrontPassword(password) === storefront.password;
   if (!valid) {
     return { error: "Incorrect password. Please try again." };
   }

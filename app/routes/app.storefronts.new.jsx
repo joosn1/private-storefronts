@@ -4,7 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import bcrypt from "bcryptjs";
+import { hashStorefrontPassword } from "../utils/session.server";
 
 // ─── Server ──────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ export const action = async ({ request }) => {
   // Hash password if provided
   let hashedPassword = null;
   if (passwordEnabled && password?.trim()) {
-    hashedPassword = await bcrypt.hash(password.trim(), 12);
+    hashedPassword = hashStorefrontPassword(password.trim());
   }
 
   // Create storefront
@@ -94,13 +94,12 @@ export const action = async ({ request }) => {
   // Create customers
   if (requireLogin && customers?.length) {
     for (const customer of customers) {
-      if (!customer.email || !customer.password) continue;
-      const hash = await bcrypt.hash(customer.password, 12);
+      if (!customer.email) continue;
       await prisma.storefrontCustomer.create({
         data: {
           storefrontId: storefront.id,
           email: customer.email.trim().toLowerCase(),
-          passwordHash: hash,
+          passwordHash: "",
           name: customer.name?.trim() || null,
           isActive: true,
         },
