@@ -70,8 +70,6 @@ export const action = async ({ request }) => {
     const edges = data?.data?.productVariants?.edges || [];
 
     for (const { node } of edges) {
-      // Skip archived/draft products
-      if (node.product.status !== "ACTIVE") continue;
       matchedSkus.add(node.sku);
       const rawMetafield = node.metafield?.value ?? null;
       let storefrontPrice = null;
