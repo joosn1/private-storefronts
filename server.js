@@ -244,18 +244,14 @@ function buildLoginHtml(storefront, proxyBase, error) {
   <main style="max-width:480px;margin:3rem auto;padding:0 1rem;">
     <div style="background:white;border-radius:10px;padding:2rem;box-shadow:0 2px 12px rgba(0,0,0,.08);">
       <h2 style="margin:0 0 .5rem;font-size:1.375rem;font-weight:700;">Sign In</h2>
-      <p style="margin:0 0 1.5rem;color:#555;font-size:.9rem;">Sign in to access this private storefront.</p>
+      <p style="margin:0 0 1.5rem;color:#555;font-size:.9rem;">Enter your email address to access this private storefront.</p>
       ${error ? `<div style="background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;color:#cc0000;font-size:.9rem;">${esc(error)}</div>` : ""}
       <form method="post" action="${esc(proxyBase)}/login">
-        <div style="margin-bottom:1rem;">
+        <div style="margin-bottom:1.5rem;">
           <label style="display:block;font-weight:600;margin-bottom:.4rem;font-size:.9rem;">Email Address</label>
           <input name="email" type="email" required autofocus autocomplete="email" style="width:100%;padding:.75rem;border:1px solid #ddd;border-radius:6px;font-size:1rem;" onfocus="this.style.borderColor='${accent}'" onblur="this.style.borderColor='#ddd'">
         </div>
-        <div style="margin-bottom:1.5rem;">
-          <label style="display:block;font-weight:600;margin-bottom:.4rem;font-size:.9rem;">Password</label>
-          <input name="password" type="password" required autocomplete="current-password" style="width:100%;padding:.75rem;border:1px solid #ddd;border-radius:6px;font-size:1rem;" onfocus="this.style.borderColor='${accent}'" onblur="this.style.borderColor='#ddd'">
-        </div>
-        <button type="submit" style="width:100%;padding:.875rem;background:${accent};color:${contrast};border:none;border-radius:6px;font-size:1rem;font-weight:600;cursor:pointer;">Sign In</button>
+        <button type="submit" style="width:100%;padding:.875rem;background:${accent};color:${contrast};border:none;border-radius:6px;font-size:1rem;font-weight:600;cursor:pointer;">Access Storefront</button>
       </form>
     </div>
   </main>
@@ -594,16 +590,17 @@ async function handleProxyAuth(req, res) {
     if (verified) return res.redirect(302, proxyBase);
 
     if (req.method === "POST") {
-      const bcrypt = (await import("bcryptjs")).default;
-      const password = req.body?.password || "";
+      const password = (req.body?.password || "").trim();
       if (!password) {
         return res.send(buildAuthHtml(storefront, proxyBase, "Please enter the password."));
       }
-      const isValid = await bcrypt.compare(password, storefront.password);
+      const stored = (storefront.password || "").trim();
+      const isValid = password === stored;
+      console.log(`[auth] ${slug}: entered="${password}" stored="${stored}" match=${isValid}`);
       if (!isValid) {
         return res.send(buildAuthHtml(storefront, proxyBase, "Incorrect password. Please try again."));
       }
-      const cookieStr = buildSetCookieHeader(passwordCookieName(slug), "1", { maxAge: SESSION_MAX_AGE });
+      const cookieStr = buildSetCookieHeader(passwordCookieName(slug), "verified", { maxAge: SESSION_MAX_AGE });
       res.setHeader("Set-Cookie", cookieStr);
       return res.redirect(302, proxyBase);
     }
@@ -639,17 +636,15 @@ async function handleProxyLogin(req, res) {
     }
 
     if (req.method === "POST") {
-      const bcrypt = (await import("bcryptjs")).default;
       const email = (req.body?.email || "").trim().toLowerCase();
-      const password = req.body?.password || "";
-      if (!email || !password) {
-        return res.send(buildLoginHtml(storefront, proxyBase, "Email and password are required."));
+      if (!email) {
+        return res.send(buildLoginHtml(storefront, proxyBase, "Please enter your email address."));
       }
       const customer = await db.storefrontCustomer.findFirst({
         where: { storefrontId: storefront.id, email, isActive: true },
       });
-      if (!customer || !(await bcrypt.compare(password, customer.passwordHash))) {
-        return res.send(buildLoginHtml(storefront, proxyBase, "Invalid email or password."));
+      if (!customer) {
+        return res.send(buildLoginHtml(storefront, proxyBase, "This email is not authorized to access this storefront. Please contact the store owner."));
       }
       const cookieStr = buildSetCookieHeader(customerCookieName(slug), customer.id, { maxAge: SESSION_MAX_AGE });
       res.setHeader("Set-Cookie", cookieStr);
