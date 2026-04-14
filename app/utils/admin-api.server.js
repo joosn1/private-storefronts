@@ -12,7 +12,7 @@ async function getAccessToken(shopDomain) {
   return session.accessToken;
 }
 
-async function adminGraphQL(shopDomain, query, variables = {}) {
+export async function adminGraphQL(shopDomain, query, variables = {}) {
   const token = await getAccessToken(shopDomain);
   const res = await fetch(
     `https://${shopDomain}/admin/api/${ADMIN_API_VERSION}/graphql.json`,
