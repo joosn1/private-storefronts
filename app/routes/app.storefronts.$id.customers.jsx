@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react"; // useRef kept for deleteModalRef
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import bcrypt from "bcryptjs";
 
 // ─── Server ──────────────────────────────────────────────────────────────────
 
@@ -56,10 +55,8 @@ export const action = async ({ request, params }) => {
   if (intent === "add") {
     const email = formData.get("email")?.trim().toLowerCase();
     const name = formData.get("name")?.trim() || null;
-    const password = formData.get("password");
 
     if (!email) return { error: "Email is required" };
-    if (!password) return { error: "Password is required" };
 
     // Check for duplicate email in this storefront
     const existing = await prisma.storefrontCustomer.findFirst({
@@ -67,13 +64,12 @@ export const action = async ({ request, params }) => {
     });
     if (existing) return { error: "A customer with this email already exists" };
 
-    const passwordHash = await bcrypt.hash(password, 12);
     await prisma.storefrontCustomer.create({
       data: {
         storefrontId: params.id,
         email,
         name,
-        passwordHash,
+        passwordHash: "", // unused — customers authenticate via Shopify
         isActive: true,
       },
     });
@@ -92,24 +88,6 @@ export const action = async ({ request, params }) => {
       });
     }
     return { success: true, message: customer?.isActive ? "Customer deactivated" : "Customer activated" };
-  }
-
-  if (intent === "reset-password") {
-    const customerId = formData.get("customerId");
-    const newPassword = formData.get("newPassword");
-    if (!newPassword) return { error: "New password is required" };
-
-    const customer = await prisma.storefrontCustomer.findFirst({
-      where: { id: customerId, storefrontId: params.id },
-    });
-    if (!customer) return { error: "Customer not found" };
-
-    const passwordHash = await bcrypt.hash(newPassword, 12);
-    await prisma.storefrontCustomer.update({
-      where: { id: customerId },
-      data: { passwordHash },
-    });
-    return { success: true, message: "Password updated" };
   }
 
   if (intent === "delete") {
@@ -131,12 +109,9 @@ export default function StorefrontCustomers() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const deleteModalRef = useRef(null);
-  const resetModalRef = useRef(null);
 
-  const [newCustomer, setNewCustomer] = useState({ email: "", name: "", password: "" });
+  const [newCustomer, setNewCustomer] = useState({ email: "", name: "" });
   const [pendingDelete, setPendingDelete] = useState(null);
-  const [pendingReset, setPendingReset] = useState(null);
-  const [newPassword, setNewPassword] = useState("");
 
   const isLoading = fetcher.state !== "idle";
 
@@ -144,12 +119,7 @@ export default function StorefrontCustomers() {
     if (fetcher.data?.success) {
       shopify.toast.show(fetcher.data.message || "Done");
       if (fetcher.data.message?.includes("added")) {
-        setNewCustomer({ email: "", name: "", password: "" });
-      }
-      if (fetcher.data.message?.includes("Password")) {
-        setNewPassword("");
-        resetModalRef.current?.hideOverlay();
-        setPendingReset(null);
+        setNewCustomer({ email: "", name: "" });
       }
     }
     if (fetcher.data?.error) {
@@ -158,12 +128,11 @@ export default function StorefrontCustomers() {
   }, [fetcher.data, shopify]);
 
   function handleAddCustomer() {
-    if (!newCustomer.email || !newCustomer.password) return;
+    if (!newCustomer.email) return;
     const fd = new FormData();
     fd.set("intent", "add");
     fd.set("email", newCustomer.email);
     fd.set("name", newCustomer.name);
-    fd.set("password", newCustomer.password);
     fetcher.submit(fd, { method: "post" });
   }
 
@@ -184,15 +153,6 @@ export default function StorefrontCustomers() {
     setPendingDelete(null);
   }
 
-  function handleResetPasswordConfirm() {
-    if (!pendingReset || !newPassword) return;
-    const fd = new FormData();
-    fd.set("intent", "reset-password");
-    fd.set("customerId", pendingReset.id);
-    fd.set("newPassword", newPassword);
-    fetcher.submit(fd, { method: "post" });
-  }
-
   return (
     <>
       <s-page heading={`Customers — ${storefront.name}`}>
@@ -207,6 +167,9 @@ export default function StorefrontCustomers() {
         {/* Add customer form */}
         <s-section heading="Add Customer">
           <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Customers authenticate using their Shopify account. Enter their email address to grant access to this storefront.
+            </s-paragraph>
             <s-stack direction="inline" gap="base">
               <s-text-field
                 label="Email"
@@ -223,19 +186,11 @@ export default function StorefrontCustomers() {
                 placeholder="Full name"
                 style={{ flex: 1 }}
               />
-              <s-password-field
-                label="Password"
-                value={newCustomer.password}
-                onInput={(e) => setNewCustomer((p) => ({ ...p, password: e.target.value }))}
-                placeholder="Set a password"
-                style={{ flex: 1 }}
-                required
-              />
             </s-stack>
             <s-button
               variant="primary"
               onClick={handleAddCustomer}
-              disabled={isLoading || !newCustomer.email || !newCustomer.password}
+              disabled={isLoading || !newCustomer.email}
             >
               Add Customer
             </s-button>
@@ -279,16 +234,6 @@ export default function StorefrontCustomers() {
                           {customer.isActive ? "Deactivate" : "Activate"}
                         </s-button>
                         <s-button
-                          onClick={() => {
-                            setPendingReset(customer);
-                            setNewPassword("");
-                            resetModalRef.current?.showOverlay();
-                          }}
-                          disabled={isLoading}
-                        >
-                          Reset Password
-                        </s-button>
-                        <s-button
                           tone="critical"
                           onClick={() => {
                             setPendingDelete(customer);
@@ -328,36 +273,6 @@ export default function StorefrontCustomers() {
         </s-button-group>
       </s-modal>
 
-      {/* Reset password modal */}
-      <s-modal
-        ref={resetModalRef}
-        heading="Reset Password"
-        onHide={() => { setPendingReset(null); setNewPassword(""); }}
-      >
-        <s-stack direction="block" gap="base">
-          <s-paragraph>
-            Set a new password for <strong>{pendingReset?.email}</strong>.
-          </s-paragraph>
-          <s-password-field
-            label="New Password"
-            value={newPassword}
-            onInput={(e) => setNewPassword(e.target.value)}
-            placeholder="Enter new password"
-          />
-        </s-stack>
-        <s-button-group slot="primary-action">
-          <s-button
-            variant="primary"
-            onClick={handleResetPasswordConfirm}
-            disabled={!newPassword || isLoading}
-          >
-            Update Password
-          </s-button>
-          <s-button onClick={() => resetModalRef.current?.hideOverlay()}>
-            Cancel
-          </s-button>
-        </s-button-group>
-      </s-modal>
     </>
   );
 }
