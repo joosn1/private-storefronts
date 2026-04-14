@@ -142,7 +142,7 @@ export const action = async ({ request, params }) => {
   const result = await createDraftOrder(storefront.shopDomain, { lineItems });
   console.log("[checkout] draft order result:", JSON.stringify(result));
   if (result.error) return { error: result.error };
-  return { success: true };
+  return { checkoutUrl: result.invoiceUrl };
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -155,7 +155,6 @@ export default function StorefrontLayout() {
   const [cart, setCart] = useState({}); // { variantId: quantity }
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutError, setCheckoutError] = useState(null);
-  const [orderSubmitted, setOrderSubmitted] = useState(false);
 
   const primaryColor = storefront.primaryColor;
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
@@ -163,10 +162,8 @@ export default function StorefrontLayout() {
   // Handle fetcher response (checkout result)
   useEffect(() => {
     if (!fetcher.data) return;
-    if (fetcher.data.success) {
-      setCart({});
-      setCartOpen(false);
-      setOrderSubmitted(true);
+    if (fetcher.data.checkoutUrl) {
+      window.location.href = fetcher.data.checkoutUrl;
     } else if (fetcher.data.error) {
       setCheckoutError(fetcher.data.error);
     }
@@ -322,44 +319,6 @@ export default function StorefrontLayout() {
           </div>
         )}
       </main>
-
-      {/* Order confirmation overlay */}
-      {orderSubmitted && (
-        <>
-          <div className="psf-overlay" onClick={() => setOrderSubmitted(false)} />
-          <div
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              background: "#fff",
-              borderRadius: 12,
-              padding: "40px 48px",
-              zIndex: 102,
-              textAlign: "center",
-              maxWidth: 420,
-              width: "90vw",
-              boxShadow: "0 8px 40px rgba(0,0,0,.2)",
-            }}
-          >
-            <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-            <h2 style={{ margin: "0 0 12px", fontSize: 22, color: "#202223" }}>
-              Order Submitted!
-            </h2>
-            <p style={{ margin: "0 0 24px", color: "#6d7175", fontSize: 15, lineHeight: 1.5 }}>
-              Your order has been received and is being reviewed. We'll be in touch shortly to confirm and arrange payment.
-            </p>
-            <button
-              className="psf-btn"
-              onClick={() => setOrderSubmitted(false)}
-              style={{ background: primaryColor, color: "#fff", padding: "12px 32px", fontSize: 15 }}
-            >
-              Continue Shopping
-            </button>
-          </div>
-        </>
-      )}
 
       {/* Cart sidebar */}
       {cartOpen && (
@@ -541,7 +500,7 @@ export default function StorefrontLayout() {
                   fontSize: 16,
                 }}
               >
-                {isCheckingOut ? "Submitting order..." : "Submit Order"}
+                {isCheckingOut ? "Processing..." : "Checkout"}
               </button>
             </div>
           </div>
