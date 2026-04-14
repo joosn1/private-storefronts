@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { redirect, useFetcher, useParams } from "react-router";
+import { redirect } from "react-router";
+import { useActionData, useLoaderData, Form } from "react-router";
 import prisma from "../db.server";
 import {
   getSessionCookie,
@@ -45,6 +45,7 @@ export const action = async ({ request, params }) => {
     return { error: "Incorrect password. Please try again." };
   }
 
+  // Use a full redirect — the browser handles Set-Cookie natively
   return redirect(`/s/${slug}`, {
     headers: {
       "Set-Cookie": buildSetCookieHeader(passwordCookieName(slug), "verified", {
@@ -55,18 +56,9 @@ export const action = async ({ request, params }) => {
 };
 
 export default function StorefrontAuth() {
-  const { slug } = useParams();
-  const fetcher = useFetcher();
-  const [error, setError] = useState(null);
-
-  // Pick up error from the action response
-  useEffect(() => {
-    if (fetcher.data?.error) {
-      setError(fetcher.data.error);
-    }
-  }, [fetcher.data]);
-
-  const isSubmitting = fetcher.state !== "idle";
+  const { slug } = useLoaderData();
+  const actionData = useActionData();
+  const error = actionData?.error;
 
   return (
     <div
@@ -95,31 +87,25 @@ export default function StorefrontAuth() {
           Enter the password to access this storefront.
         </p>
 
-        {/* Error banner — shown whenever error state is set */}
-        {error && (
-          <div
-            style={{
-              background: "#fee2e2",
-              border: "1px solid #fca5a5",
-              color: "#b91c1c",
-              padding: "12px 16px",
-              borderRadius: 6,
-              marginBottom: 20,
-              fontSize: 14,
-              fontWeight: 500,
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {/* Explicit action URL avoids any parent-route action confusion */}
+        <Form method="post" action={`/s/${slug}/auth`}>
+          {error && (
+            <div
+              style={{
+                background: "#fee2e2",
+                border: "1px solid #fca5a5",
+                color: "#b91c1c",
+                padding: "12px 16px",
+                borderRadius: 6,
+                marginBottom: 20,
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              {error}
+            </div>
+          )}
 
-        {/* Use fetcher.Form with an explicit action so the parent layout's
-            action (which expects JSON) never intercepts this POST */}
-        <fetcher.Form
-          method="post"
-          action={`/s/${slug}/auth`}
-          onSubmit={() => setError(null)}
-        >
           <label
             style={{
               display: "block",
@@ -147,22 +133,21 @@ export default function StorefrontAuth() {
           />
           <button
             type="submit"
-            disabled={isSubmitting}
             style={{
               width: "100%",
               padding: "12px 20px",
-              background: isSubmitting ? "#555" : "#000",
+              background: "#000",
               color: "#fff",
               border: "none",
               borderRadius: 6,
               fontSize: 15,
               fontWeight: 600,
-              cursor: isSubmitting ? "not-allowed" : "pointer",
+              cursor: "pointer",
             }}
           >
-            {isSubmitting ? "Checking..." : "Enter Storefront"}
+            Enter Storefront
           </button>
-        </fetcher.Form>
+        </Form>
       </div>
     </div>
   );
