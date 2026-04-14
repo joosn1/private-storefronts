@@ -7,7 +7,6 @@ import {
   customerCookieName,
 } from "../utils/session.server";
 import { createDraftOrder } from "../utils/admin-api.server";
-import { createCartWithLines } from "../utils/storefront-api.server";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -111,50 +110,36 @@ export const action = async ({ request, params }) => {
     storefront.products.map((p) => [p.shopifyVariantId, p]),
   );
 
-  // If any item has a custom price, the entire order must be a draft order
-  const hasCustomPrice = items.some((item) => {
+  // All orders are created as draft orders so custom pricing is always honoured
+  // and the merchant can review before fulfilment.
+  const lineItems = items.map((item) => {
     const p = variantMap.get(item.variantId);
-    return p?.customPrice != null;
+    if (p?.customPrice != null) {
+      // Custom-priced item — send as a custom line item with explicit price.
+      // variantId is intentionally omitted: Shopify always uses `price` on
+      // custom line items with no catalog-price conflict.
+      const title = p.variantTitle && p.variantTitle !== "Default Title"
+        ? `${p.productTitle} — ${p.variantTitle}`
+        : p.productTitle;
+      return {
+        title,
+        originalUnitPrice: p.customPrice.toFixed(2),
+        quantity: item.quantity,
+        ...(p.variantSku ? { sku: p.variantSku } : {}),
+        requiresShipping: true,
+        taxable: true,
+      };
+    }
+    // No custom price — link to the real variant for inventory tracking
+    return {
+      variantId: item.variantId,
+      quantity: item.quantity,
+    };
   });
 
-  if (hasCustomPrice) {
-    const lineItems = items.map((item) => {
-      const p = variantMap.get(item.variantId);
-      if (p?.customPrice != null) {
-        // Custom line item — variantId is intentionally omitted so Shopify
-        // always uses originalUnitPrice instead of the catalog price.
-        const title = p.variantTitle && p.variantTitle !== "Default Title"
-          ? `${p.productTitle} — ${p.variantTitle}`
-          : p.productTitle;
-        return {
-          title,
-          originalUnitPrice: p.customPrice.toFixed(2),
-          quantity: item.quantity,
-          ...(p.variantSku ? { sku: p.variantSku } : {}),
-          requiresShipping: true,
-          taxable: true,
-        };
-      }
-      // No custom price — use the real variant so inventory is tracked
-      return {
-        variantId: item.variantId,
-        quantity: item.quantity,
-      };
-    });
-
-    const result = await createDraftOrder(storefront.shopDomain, { lineItems });
-    if (result.error) return { error: result.error };
-    return { checkoutUrl: result.invoiceUrl };
-  } else {
-    const lines = items.map((item) => ({
-      merchandiseId: item.variantId,
-      quantity: item.quantity,
-    }));
-
-    const cart = await createCartWithLines(storefront.shopDomain, lines);
-    if (!cart) return { error: "Failed to create checkout. Please try again." };
-    return { checkoutUrl: cart.checkoutUrl };
-  }
+  const result = await createDraftOrder(storefront.shopDomain, { lineItems });
+  if (result.error) return { error: result.error };
+  return { success: true };
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -167,6 +152,7 @@ export default function StorefrontLayout() {
   const [cart, setCart] = useState({}); // { variantId: quantity }
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutError, setCheckoutError] = useState(null);
+  const [orderSubmitted, setOrderSubmitted] = useState(false);
 
   const primaryColor = storefront.primaryColor;
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
@@ -174,8 +160,10 @@ export default function StorefrontLayout() {
   // Handle fetcher response (checkout result)
   useEffect(() => {
     if (!fetcher.data) return;
-    if (fetcher.data.checkoutUrl) {
-      window.location.href = fetcher.data.checkoutUrl;
+    if (fetcher.data.success) {
+      setCart({});
+      setCartOpen(false);
+      setOrderSubmitted(true);
     } else if (fetcher.data.error) {
       setCheckoutError(fetcher.data.error);
     }
@@ -331,6 +319,44 @@ export default function StorefrontLayout() {
           </div>
         )}
       </main>
+
+      {/* Order confirmation overlay */}
+      {orderSubmitted && (
+        <>
+          <div className="psf-overlay" onClick={() => setOrderSubmitted(false)} />
+          <div
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              background: "#fff",
+              borderRadius: 12,
+              padding: "40px 48px",
+              zIndex: 102,
+              textAlign: "center",
+              maxWidth: 420,
+              width: "90vw",
+              boxShadow: "0 8px 40px rgba(0,0,0,.2)",
+            }}
+          >
+            <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+            <h2 style={{ margin: "0 0 12px", fontSize: 22, color: "#202223" }}>
+              Order Submitted!
+            </h2>
+            <p style={{ margin: "0 0 24px", color: "#6d7175", fontSize: 15, lineHeight: 1.5 }}>
+              Your order has been received and is being reviewed. We'll be in touch shortly to confirm and arrange payment.
+            </p>
+            <button
+              className="psf-btn"
+              onClick={() => setOrderSubmitted(false)}
+              style={{ background: primaryColor, color: "#fff", padding: "12px 32px", fontSize: 15 }}
+            >
+              Continue Shopping
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Cart sidebar */}
       {cartOpen && (
@@ -512,7 +538,7 @@ export default function StorefrontLayout() {
                   fontSize: 16,
                 }}
               >
-                {isCheckingOut ? "Processing..." : "Checkout"}
+                {isCheckingOut ? "Submitting order..." : "Submit Order"}
               </button>
             </div>
           </div>
