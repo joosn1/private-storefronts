@@ -95,6 +95,7 @@ export const action = async ({ request, params }) => {
   }
 
   if (body._action !== "checkout") return { error: "Unknown action" };
+  console.log("[checkout] action triggered, items:", JSON.stringify(body.items));
 
   const { items } = body; // [{ variantId, quantity }]
   if (!items?.length) return { error: "Cart is empty" };
@@ -137,7 +138,9 @@ export const action = async ({ request, params }) => {
     };
   });
 
+  console.log("[checkout] lineItems to draft order:", JSON.stringify(lineItems));
   const result = await createDraftOrder(storefront.shopDomain, { lineItems });
+  console.log("[checkout] draft order result:", JSON.stringify(result));
   if (result.error) return { error: result.error };
   return { success: true };
 };
