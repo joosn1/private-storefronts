@@ -48,6 +48,38 @@ function getContrastColor(hex) {
   }
 }
 
+// ─── Auth token helpers (URL-based, works through Shopify App Proxy) ─────────
+// Shopify's App Proxy is server-to-server — cookies set by the app never reach
+// the browser.  Instead we pass a signed token in the URL query string.
+
+function getTokenSecret() {
+  return process.env.SESSION_SECRET || "fallback-dev-secret-change-in-prod";
+}
+
+function generateAuthToken(slug) {
+  const expiry = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30; // 30 days
+  const payload = `${slug}|${expiry}`;
+  const sig = crypto.createHmac("sha256", getTokenSecret()).update(payload).digest("base64url");
+  return `${expiry}.${sig}`;
+}
+
+function verifyAuthToken(token, slug) {
+  if (!token || typeof token !== "string") return false;
+  const dotIdx = token.indexOf(".");
+  if (dotIdx === -1) return false;
+  const expiry = parseInt(token.slice(0, dotIdx), 10);
+  const sig = token.slice(dotIdx + 1);
+  if (isNaN(expiry) || expiry < Math.floor(Date.now() / 1000)) return false;
+  const payload = `${slug}|${expiry}`;
+  const expected = crypto.createHmac("sha256", getTokenSecret()).update(payload).digest("base64url");
+  try {
+    return sig.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
 function fmtPrice(amount, currency = "USD") {
   const n = parseFloat(amount);
   if (isNaN(n)) return "$0.00";
@@ -60,7 +92,7 @@ function fmtPrice(amount, currency = "USD") {
 
 // ─── Storefront HTML builder ──────────────────────────────────────────────────
 
-function buildStorefrontHtml(storefront, products, shop) {
+function buildStorefrontHtml(storefront, products, shop, authToken) {
   const accent = storefront.primaryColor || "#000000";
   const contrast = getContrastColor(accent);
 
@@ -189,6 +221,7 @@ function buildStorefrontHtml(storefront, products, shop) {
     })();
     ${cartScript}
   </script>
+  ${authToken ? `<script>try{history.replaceState(null,'',location.pathname+'?psf_token=${esc(authToken)}');}catch(e){}</script>` : ""}
 </body>
 </html>`;
 }
@@ -213,7 +246,7 @@ function buildAuthHtml(storefront, proxyBase, error) {
       <h2 style="margin:0 0 .5rem;font-size:1.375rem;font-weight:700;">Enter Password</h2>
       <p style="margin:0 0 1.5rem;color:#555;font-size:.9rem;">This storefront is password-protected.</p>
       ${error ? `<div style="background:#fff0f0;border:1px solid #ffcccc;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;color:#cc0000;font-size:.9rem;">${esc(error)}</div>` : ""}
-      <form method="post" action="${esc(proxyBase)}/auth">
+      <form method="get" action="${esc(proxyBase)}">
         <div style="margin-bottom:1rem;">
           <label style="display:block;font-weight:600;margin-bottom:.4rem;font-size:.9rem;">Password</label>
           <input name="password" type="password" required autofocus style="width:100%;padding:.75rem;border:1px solid #ddd;border-radius:6px;font-size:1rem;" onfocus="this.style.borderColor='${accent}'" onblur="this.style.borderColor='#ddd'">
@@ -222,6 +255,7 @@ function buildAuthHtml(storefront, proxyBase, error) {
       </form>
     </div>
   </main>
+  <script>try{history.replaceState(null,'',location.pathname);}catch(e){}</script>
 </body>
 </html>`;
 }
@@ -504,7 +538,6 @@ async function handleProxyCheckout(req, res) {
 async function handleProxyMain(req, res) {
   try {
     const db = await getPrisma();
-    const { buildSetCookieHeader, getSessionCookie, passwordCookieName, customerCookieName, SESSION_MAX_AGE } = await getSessionUtils();
     const { slug } = req.params;
     const shop = req.query.shop || "";
 
@@ -515,14 +548,33 @@ async function handleProxyMain(req, res) {
 
     const proxyBase = shop ? `https://${shop}/apps/storefronts/${slug}` : `/storefronts/${slug}`;
 
-    // Convert express request to a Request object for cookie parsing
-    const cookieHeader = req.headers.cookie || "";
-    const fakeRequest = { headers: { get: (h) => h === "cookie" ? cookieHeader : null } };
-
-    // If the storefront has a password, anyone must enter it to get in — no whitelist needed
+    // ── Password gate (token-based — works through Shopify App Proxy) ──
+    // Shopify's App Proxy is server-to-server, so browser cookies are NOT
+    // forwarded.  Instead we use signed tokens passed in the URL.
+    let authToken = null;
     if (storefront.password) {
-      const verified = getSessionCookie(fakeRequest, passwordCookieName(slug));
-      if (!verified) return res.redirect(302, `${proxyBase}/auth`);
+      const existingToken = req.query.psf_token;
+      const submittedPassword = req.query.password;
+
+      if (existingToken && verifyAuthToken(existingToken, slug)) {
+        // Valid token from a previous auth — reuse it
+        authToken = existingToken;
+      } else if (typeof submittedPassword === "string" && submittedPassword.length > 0) {
+        // Password submitted via the auth form (GET ?password=xxx)
+        const stored = (storefront.password || "").trim();
+        if (submittedPassword.trim() === stored) {
+          authToken = generateAuthToken(slug);
+          console.log(`[auth] ${slug}: password correct, token issued`);
+        } else {
+          console.log(`[auth] ${slug}: wrong password`);
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          return res.send(buildAuthHtml(storefront, proxyBase, "Incorrect password. Please try again."));
+        }
+      } else {
+        // No token and no password — show the auth form
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.send(buildAuthHtml(storefront, proxyBase, null));
+      }
     }
 
     // Load products from DB (metadata cached at storefront configuration time — no API call needed)
@@ -559,7 +611,7 @@ async function handleProxyMain(req, res) {
     }
     const products = [...productMap.values()];
 
-    const html = buildStorefrontHtml(storefront, products, shop);
+    const html = buildStorefrontHtml(storefront, products, shop, authToken);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
   } catch (err) {
@@ -568,10 +620,12 @@ async function handleProxyMain(req, res) {
   }
 }
 
+// All auth logic now lives in handleProxyMain.  This route exists for
+// backward-compatibility — it simply shows the auth form (which submits
+// back to the main storefront URL via GET).
 async function handleProxyAuth(req, res) {
   try {
     const db = await getPrisma();
-    const { buildSetCookieHeader, getSessionCookie, passwordCookieName, SESSION_MAX_AGE } = await getSessionUtils();
     const { slug } = req.params;
     const shop = req.query.shop || "";
     const proxyBase = shop ? `https://${shop}/apps/storefronts/${slug}` : `/storefronts/${slug}`;
@@ -579,27 +633,6 @@ async function handleProxyAuth(req, res) {
     const storefront = await db.storefront.findUnique({ where: { slug } });
     if (!storefront || !storefront.isActive) return res.status(404).send("Not Found");
     if (!storefront.password) return res.redirect(302, proxyBase);
-
-    const cookieHeader = req.headers.cookie || "";
-    const fakeRequest = { headers: { get: (h) => h === "cookie" ? cookieHeader : null } };
-    const verified = getSessionCookie(fakeRequest, passwordCookieName(slug));
-    if (verified) return res.redirect(302, proxyBase);
-
-    if (req.method === "POST") {
-      const password = (req.body?.password || "").trim();
-      if (!password) {
-        return res.send(buildAuthHtml(storefront, proxyBase, "Please enter the password."));
-      }
-      const stored = (storefront.password || "").trim();
-      const isValid = password === stored;
-      console.log(`[auth] ${slug}: entered="${password}" stored="${stored}" match=${isValid}`);
-      if (!isValid) {
-        return res.send(buildAuthHtml(storefront, proxyBase, "Incorrect password. Please try again."));
-      }
-      const cookieStr = buildSetCookieHeader(passwordCookieName(slug), "verified", { maxAge: SESSION_MAX_AGE });
-      res.setHeader("Set-Cookie", cookieStr);
-      return res.redirect(302, proxyBase);
-    }
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(buildAuthHtml(storefront, proxyBase, null));
