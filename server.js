@@ -174,7 +174,10 @@ function buildStorefrontHtml(storefront, products, shop, authToken) {
   <div id="cart-panel" style="display:none;position:fixed;right:0;top:0;bottom:0;width:360px;background:white;box-shadow:-4px 0 20px rgba(0,0,0,.15);z-index:1000;overflow:auto;padding:1.5rem;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
       <h2 style="margin:0;font-size:1.25rem;">Your Cart</h2>
-      <button id="cart-close" style="background:none;border:none;cursor:pointer;font-size:1.5rem;">✕</button>
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <button id="cart-clear" style="background:none;border:1px solid #ddd;border-radius:6px;cursor:pointer;font-size:.8rem;color:#888;padding:.3rem .6rem;">Clear</button>
+        <button id="cart-close" style="background:none;border:none;cursor:pointer;font-size:1.5rem;">✕</button>
+      </div>
     </div>
     <div id="cart-items"><p style="color:#666;">Your cart is empty.</p></div>
     <div id="cart-footer" style="display:none;border-top:1px solid #eee;padding-top:1rem;margin-top:1rem;">
@@ -192,6 +195,14 @@ function buildStorefrontHtml(storefront, products, shop, authToken) {
     (function(){
       document.getElementById('cart-toggle').addEventListener('click',function(){var p=document.getElementById('cart-panel');p.style.display=p.style.display==='none'?'block':'none';});
       document.getElementById('cart-close').addEventListener('click',function(){document.getElementById('cart-panel').style.display='none';});
+      document.getElementById('cart-clear').addEventListener('click',function(){
+        if(!confirm('Remove all items from your cart?'))return;
+        var _ck='psf_cart_lines_'+_psfSlug;
+        var cartLines=JSON.parse(localStorage.getItem(_ck)||'[]');
+        cartLines.forEach(function(l){var id=String(l.id||'').split('/').pop();if(id)fetch('/cart/change.js',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({id:parseInt(id,10),quantity:0})}).catch(function(){});});
+        localStorage.removeItem(_ck);
+        location.reload();
+      });
       document.getElementById('checkout-btn').addEventListener('click',async function(){
         var btn=this;
         btn.textContent='Processing...';btn.disabled=true;
@@ -313,7 +324,7 @@ function buildCartScript(accentColor) {
       else{
         ie.innerHTML=lines.map(function(l,i){
           return '<div style="display:flex;justify-content:space-between;align-items:center;padding:.75rem 0;border-bottom:1px solid #eee">'
-            +'<div>'
+            +'<div style="flex:1;min-width:0;">'
             +'<div style="font-weight:600;font-size:.9rem">'+l.t+'</div>'
             +(l.vt?'<div style="font-size:.8rem;color:#666">'+l.vt+'</div>':'')
             +'<div style="display:flex;align-items:center;gap:.5rem;margin-top:.375rem">'
@@ -322,7 +333,10 @@ function buildCartScript(accentColor) {
             +'<button class="psf-qty-btn" data-idx="'+i+'" data-delta="1" style="'+btnStyle+'">+</button>'
             +'</div>'
             +'</div>'
-            +'<div style="font-weight:600">'+fmtCur(l.price*l.qty,l.cur)+'</div>'
+            +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:.375rem;margin-left:.75rem;">'
+            +'<button class="psf-remove-btn" data-idx="'+i+'" style="background:none;border:none;cursor:pointer;color:#bbb;font-size:1rem;line-height:1;padding:0;" title="Remove">✕</button>'
+            +'<span style="font-weight:600;font-size:.9rem;">'+fmtCur(l.price*l.qty,l.cur)+'</span>'
+            +'</div>'
             +'</div>';
         }).join('');
         document.querySelectorAll('.psf-qty-btn').forEach(function(btn){
@@ -337,6 +351,16 @@ function buildCartScript(accentColor) {
             }else{
               if(vid)fetch('/cart/change.js',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({id:vid,quantity:lines[idx].qty})}).catch(function(){});
             }
+            updateUI();
+          });
+        });
+        document.querySelectorAll('.psf-remove-btn').forEach(function(btn){
+          btn.addEventListener('click',function(){
+            var idx=parseInt(this.dataset.idx,10);
+            if(isNaN(idx)||!lines[idx])return;
+            var vid=numId(lines[idx].id);
+            lines.splice(idx,1);
+            if(vid)fetch('/cart/change.js',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({id:vid,quantity:0})}).catch(function(){});
             updateUI();
           });
         });
