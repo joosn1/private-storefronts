@@ -152,6 +152,18 @@ export default function StorefrontLayout() {
     });
   }
 
+  function removeItemFromCart(variantId) {
+    setCart((prev) => {
+      const next = { ...prev };
+      delete next[variantId];
+      return next;
+    });
+  }
+
+  function clearCart() {
+    setCart({});
+  }
+
   function handleCheckout() {
     const items = Object.entries(cart).map(([variantId, quantity]) => ({
       variantId,
@@ -237,6 +249,8 @@ export default function StorefrontLayout() {
         .psf-btn:disabled { opacity: .5; cursor: not-allowed; }
         .psf-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; }
         .psf-cart { position: fixed; right: 0; top: 0; bottom: 0; width: 380px; max-width: 100vw; background: #fff; z-index: 101; display: flex; flex-direction: column; box-shadow: -4px 0 24px rgba(0,0,0,.2); }
+        .psf-cart-remove:hover { opacity: .8; transform: scale(1.1); }
+        .psf-clear-cart:hover { background: #e53935 !important; color: #fff !important; }
         @media (max-width: 600px) { .psf-cart { width: 100vw; } .psf-grid { grid-template-columns: 1fr !important; } }
       `}</style>
 
@@ -423,6 +437,30 @@ export default function StorefrontLayout() {
                       >
                         +
                       </button>
+                      <button
+                        className="psf-cart-remove"
+                        onClick={() => removeItemFromCart(item.variantId)}
+                        title="Remove item"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          border: "none",
+                          borderRadius: 4,
+                          background: "#e53935",
+                          color: "#fff",
+                          cursor: "pointer",
+                          fontSize: 16,
+                          fontWeight: 700,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          lineHeight: 1,
+                          boxShadow: "0 2px 6px rgba(229,57,53,0.45)",
+                          transition: "opacity .15s, transform .15s",
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
                   </div>
                 ))
@@ -436,13 +474,36 @@ export default function StorefrontLayout() {
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
+                  alignItems: "center",
                   marginBottom: 16,
-                  fontWeight: 600,
-                  fontSize: 16,
                 }}
               >
-                <span>Total</span>
-                <span>${cartTotal.toFixed(2)}</span>
+                <div style={{ fontWeight: 600, fontSize: 16 }}>
+                  Total
+                  <span style={{ marginLeft: 8, color: "#111" }}>
+                    ${cartTotal.toFixed(2)}
+                  </span>
+                </div>
+                {cartItems.length > 0 && (
+                  <button
+                    className="psf-clear-cart"
+                    onClick={clearCart}
+                    style={{
+                      border: "2px solid #e53935",
+                      borderRadius: 6,
+                      background: "#fff",
+                      color: "#e53935",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      padding: "5px 12px",
+                      boxShadow: "0 2px 6px rgba(229,57,53,0.25)",
+                      transition: "background .15s, color .15s",
+                    }}
+                  >
+                    Clear Cart
+                  </button>
+                )}
               </div>
               {checkoutError && (
                 <div
