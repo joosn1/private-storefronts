@@ -212,9 +212,9 @@ function buildStorefrontHtml(storefront, products, shop, authToken) {
           if(!cartLines.length){btn.textContent='Proceed to Checkout';btn.disabled=false;return;}
           var shopParam=_psfShop?'?shop='+encodeURIComponent(_psfShop):'';
           var r=await fetch('/apps/storefronts/'+_psfSlug+'/checkout'+shopParam,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({lines:cartLines.map(function(l){return{variantId:l.id,qty:l.qty,price:l.price,title:l.t};})})});
-          var d=await r.json().catch(function(){return{};});
+          var d=await r.json().catch(function(){return{error:'Could not proceed to checkout (error '+r.status+'). Please try again or contact us.'};});
           if(d.url){localStorage.removeItem(_ck);window.location.href=d.url;}else{alert(d.error||'Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
-        }catch(e){alert('Could not proceed to checkout. Please try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
+        }catch(e){alert('Could not reach checkout ('+(e&&e.message||'network error')+'). Please check your connection and try again.');btn.textContent='Proceed to Checkout';btn.disabled=false;}
       });
     })();
     (function(){
@@ -412,17 +412,19 @@ function buildCartScript(accentColor) {
 // ─── Route handlers ───────────────────────────────────────────────────────────
 
 // Offline tokens expire (expiringOfflineAccessTokens), so refresh before use.
-async function getOfflineSession(db, shop) {
-  const session = await db.session.findFirst({
+// Refreshes are de-duplicated per shop: Shopify rotates the refresh token, so two
+// concurrent refreshes would race and the loser would be rejected.
+const refreshInFlight = new Map();
+
+async function findOfflineSession(db, shop) {
+  return db.session.findFirst({
     where: { shop, isOnline: false },
     orderBy: { id: "desc" },
   });
-  if (!session?.accessToken) return session;
+}
 
-  const expiresSoon = session.expires && new Date(session.expires).getTime() - Date.now() < 5 * 60 * 1000;
-  if (!expiresSoon || !session.refreshToken) return session;
-
-  const r = await fetch(`https://${shop}/admin/oauth/access_token`, {
+async function refreshOfflineSession(db, session) {
+  const r = await fetch(`https://${session.shop}/admin/oauth/access_token`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
@@ -434,11 +436,12 @@ async function getOfflineSession(db, shop) {
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok || !data.access_token) {
-    console.error("Offline token refresh failed:", r.status, JSON.stringify(data));
+    console.error(`Offline token refresh failed for ${session.shop}:`, r.status, JSON.stringify(data));
     return session;
   }
 
   const now = Date.now();
+  console.log(`[token] refreshed offline token for ${session.shop}`);
   return db.session.update({
     where: { id: session.id },
     data: {
@@ -452,6 +455,52 @@ async function getOfflineSession(db, shop) {
   });
 }
 
+async function getOfflineSession(db, shop, { force = false } = {}) {
+  if (refreshInFlight.has(shop)) return refreshInFlight.get(shop);
+
+  const session = await findOfflineSession(db, shop);
+  if (!session?.accessToken || !session.refreshToken) return session;
+
+  const expiresSoon = session.expires && new Date(session.expires).getTime() - Date.now() < 5 * 60 * 1000;
+  if (!force && !expiresSoon) return session;
+
+  if (refreshInFlight.has(shop)) return refreshInFlight.get(shop);
+  const p = refreshOfflineSession(db, session)
+    .catch((err) => {
+      console.error(`Offline token refresh error for ${shop}:`, err);
+      return session;
+    })
+    .finally(() => refreshInFlight.delete(shop));
+  refreshInFlight.set(shop, p);
+  return p;
+}
+
+// Keep-alive: refresh every shop's offline token on a schedule so the refresh
+// token never lapses during quiet periods with no checkouts or admin visits.
+async function refreshAllOfflineSessions() {
+  try {
+    const db = await getPrisma();
+    const sessions = await db.session.findMany({
+      where: { isOnline: false, refreshToken: { not: null } },
+      select: { shop: true },
+      distinct: ["shop"],
+    });
+    for (const { shop } of sessions) {
+      await getOfflineSession(db, shop, { force: true });
+    }
+  } catch (err) {
+    console.error("Offline token keep-alive failed:", err);
+  }
+}
+setInterval(refreshAllOfflineSessions, 30 * 60 * 1000).unref();
+setTimeout(refreshAllOfflineSessions, 60 * 1000).unref();
+
+// Sends a checkout error. Always HTTP 200: Shopify's app proxy replaces 4xx/5xx
+// response bodies, which would hide the message from the customer.
+function sendCheckoutError(res, message) {
+  return res.json({ error: message });
+}
+
 async function handleProxyCheckout(req, res) {
   try {
     const db = await getPrisma();
@@ -460,18 +509,18 @@ async function handleProxyCheckout(req, res) {
 
     const storefront = await db.storefront.findUnique({ where: { slug } });
     if (!storefront || !storefront.isActive) {
-      return res.status(404).json({ error: "Storefront not found" });
+      return sendCheckoutError(res, "Storefront not found");
     }
 
     // Find an offline access token for this shop (refreshing it if expired)
     const session = await getOfflineSession(db, storefront.shopDomain);
     if (!session?.accessToken) {
-      return res.status(500).json({ error: "Shop session not found. Please reinstall the app." });
+      return sendCheckoutError(res, "Shop session not found. Please reinstall the app.");
     }
 
     const { lines } = req.body || {};
     if (!Array.isArray(lines) || !lines.length) {
-      return res.status(400).json({ error: "Cart is empty" });
+      return sendCheckoutError(res, "Cart is empty");
     }
 
     // Look up custom prices from DB — never trust client-submitted prices
@@ -518,13 +567,13 @@ async function handleProxyCheckout(req, res) {
         })
         .join(",");
 
-      if (!cartSegment) return res.status(400).json({ error: "No valid line items" });
+      if (!cartSegment) return sendCheckoutError(res, "No valid line items");
 
       return res.json({ url: `https://${storefront.shopDomain}/cart/${cartSegment}` });
     }
 
     // ── Path B: Custom prices → draft order → Shopify checkout via invoiceUrl ──
-    // Draft order is required to set per-line originalUnitPrice.
+    // Draft order is required to set per-line priceOverride.
     // Shopify converts it to a live order automatically when the customer pays.
     const lineItems = lines
       .filter((l) => l.variantId)
@@ -540,7 +589,7 @@ async function handleProxyCheckout(req, res) {
       });
 
     if (!lineItems.length) {
-      return res.status(400).json({ error: "No valid line items" });
+      return sendCheckoutError(res, "No valid line items");
     }
 
     // Build GraphQL draft order input
@@ -567,14 +616,9 @@ async function handleProxyCheckout(req, res) {
     }
 
     const apiBase = `https://${storefront.shopDomain}/admin/api/2025-10/graphql.json`;
-    const apiHeaders = {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": session.accessToken,
-    };
-
-    const createRes = await fetch(apiBase, {
+    const createDraft = (accessToken) => fetch(apiBase, {
       method: "POST",
-      headers: apiHeaders,
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
       body: JSON.stringify({
         query: `
           mutation CreateDraftOrder($input: DraftOrderInput!) {
@@ -588,23 +632,34 @@ async function handleProxyCheckout(req, res) {
       }),
     });
 
-    const createData = await createRes.json();
+    let createRes = await createDraft(session.accessToken);
+    if (createRes.status === 401) {
+      // Token rejected despite not looking expired — force a refresh and retry once
+      console.warn(`[token] 401 from Admin API for ${storefront.shopDomain}, forcing refresh`);
+      const refreshed = await getOfflineSession(db, storefront.shopDomain, { force: true });
+      createRes = await createDraft(refreshed.accessToken);
+    }
+
+    const createData = await createRes.json().catch(() => ({}));
     const createErrors = createData?.data?.draftOrderCreate?.userErrors;
     if (createErrors?.length) {
       console.error("Draft order userErrors:", JSON.stringify(createErrors));
-      return res.status(500).json({ error: "Could not create order: " + createErrors.map(e => e.message).join(", ") });
+      return sendCheckoutError(res, "Could not create order: " + createErrors.map(e => e.message).join(", "));
     }
 
     const draftOrder = createData?.data?.draftOrderCreate?.draftOrder;
     if (!draftOrder?.invoiceUrl) {
-      console.error("Draft order creation failed:", JSON.stringify(createData));
-      return res.status(500).json({ error: "Could not create order. Please try again." });
+      console.error("Draft order creation failed:", createRes.status, JSON.stringify(createData));
+      const authFailed = createRes.status === 401 || /access token/i.test(JSON.stringify(createData?.errors || ""));
+      return sendCheckoutError(res, authFailed
+        ? "Checkout is temporarily unavailable (store connection expired). Please contact us to complete your order."
+        : "Could not create order. Please try again.");
     }
 
     res.json({ url: draftOrder.invoiceUrl });
   } catch (err) {
     console.error("Checkout error:", err);
-    res.status(500).json({ error: "Server error" });
+    sendCheckoutError(res, "Something went wrong creating your order. Please try again or contact us.");
   }
 }
 
