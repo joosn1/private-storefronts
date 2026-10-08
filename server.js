@@ -411,6 +411,47 @@ function buildCartScript(accentColor) {
 
 // ─── Route handlers ───────────────────────────────────────────────────────────
 
+// Offline tokens expire (expiringOfflineAccessTokens), so refresh before use.
+async function getOfflineSession(db, shop) {
+  const session = await db.session.findFirst({
+    where: { shop, isOnline: false },
+    orderBy: { id: "desc" },
+  });
+  if (!session?.accessToken) return session;
+
+  const expiresSoon = session.expires && new Date(session.expires).getTime() - Date.now() < 5 * 60 * 1000;
+  if (!expiresSoon || !session.refreshToken) return session;
+
+  const r = await fetch(`https://${shop}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      client_id: process.env.SHOPIFY_API_KEY,
+      client_secret: process.env.SHOPIFY_API_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: session.refreshToken,
+    }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.access_token) {
+    console.error("Offline token refresh failed:", r.status, JSON.stringify(data));
+    return session;
+  }
+
+  const now = Date.now();
+  return db.session.update({
+    where: { id: session.id },
+    data: {
+      accessToken: data.access_token,
+      expires: data.expires_in ? new Date(now + data.expires_in * 1000) : null,
+      refreshToken: data.refresh_token || session.refreshToken,
+      refreshTokenExpires: data.refresh_token_expires_in
+        ? new Date(now + data.refresh_token_expires_in * 1000)
+        : session.refreshTokenExpires,
+    },
+  });
+}
+
 async function handleProxyCheckout(req, res) {
   try {
     const db = await getPrisma();
@@ -422,11 +463,8 @@ async function handleProxyCheckout(req, res) {
       return res.status(404).json({ error: "Storefront not found" });
     }
 
-    // Find an offline access token for this shop
-    const session = await db.session.findFirst({
-      where: { shop: storefront.shopDomain, isOnline: false },
-      orderBy: { id: "desc" },
-    });
+    // Find an offline access token for this shop (refreshing it if expired)
+    const session = await getOfflineSession(db, storefront.shopDomain);
     if (!session?.accessToken) {
       return res.status(500).json({ error: "Shop session not found. Please reinstall the app." });
     }
