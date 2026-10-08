@@ -569,7 +569,10 @@ async function handleProxyCheckout(req, res) {
 
       if (!cartSegment) return sendCheckoutError(res, "No valid line items");
 
-      return res.json({ url: `https://${storefront.shopDomain}/cart/${cartSegment}` });
+      // Cart attribute becomes an order note attribute, so Shopify Flow can identify
+      // (and tag) storefront orders that didn't go through a draft order.
+      const attrs = `attributes[Private Storefront]=${encodeURIComponent(storefront.name || slug)}`;
+      return res.json({ url: `https://${storefront.shopDomain}/cart/${cartSegment}?${attrs}` });
     }
 
     // ── Path B: Custom prices → draft order → Shopify checkout via invoiceUrl ──
@@ -596,7 +599,7 @@ async function handleProxyCheckout(req, res) {
     const draftInput = {
       lineItems,
       note: `Private Storefront: ${storefront.name} — ${storefront.companyName}`,
-      tags: ["private-storefront", slug],
+      tags: ["private-storefront", "Private Storefront Order", slug],
     };
 
     if (customerEmail) draftInput.email = customerEmail;
