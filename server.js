@@ -495,7 +495,8 @@ async function handleProxyCheckout(req, res) {
         const item = { variantId: l.variantId, quantity: qty };
         const prices = priceMap[l.variantId];
         if (prices && prices.custom !== null) {
-          item.originalUnitPrice = prices.custom.toFixed(2);
+          // originalUnitPrice is ignored for variant lines; priceOverride is required
+          item.priceOverride = { amount: prices.custom.toFixed(2), currencyCode: "USD" };
         }
         return item;
       });
